@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.1.0"
+version = "0.1.1"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -41,9 +41,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/epresso"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/epresso/static" = "epresso/static"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/epresso"]

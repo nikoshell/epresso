@@ -70,7 +70,7 @@ class Site:
         self.plugins.discover(config.root, config)
         # html transforms contributed by plugins via ``caps.transform_html``; reset
         # each load so re-loads are idempotent.
-        self._html_transforms: list[tuple[str, object]] = []
+        self._html_transforms: list[tuple[str, Any]] = []
         self._production = False  # True during production builds (hides drafts/scheduled)
         self._loaded = False
         self._link_resolver = None  # lazily built from routes/content

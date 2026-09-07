@@ -52,8 +52,12 @@ DEFAULT_ORDER = 1000
 
 def _int_order(value: object, default: int = DEFAULT_ORDER) -> int:
     """Parse an authored ``order`` frontmatter value to an int (default when absent)."""
+    if value is None:
+        return default
+    if not isinstance(value, (int, float, str, bytes, bytearray)):
+        return default
     try:
-        return int(value) if value is not None else default
+        return int(value)
     except (TypeError, ValueError):
         return default
 

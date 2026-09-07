@@ -347,7 +347,7 @@ def _content_deps(site, path: str) -> tuple[list[str], dict[str, set[str]], str 
         col = _entry_collection(site, data)
         if col:
             current_col = col
-            entries.setdefault(col, set()).add(str(data.id))
+            entries.setdefault(col, set()).add(str(getattr(data, "id", "")))
     return collections, entries, current_col
 
 
