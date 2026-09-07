@@ -1,6 +1,10 @@
 # `epresso dev` runs this environment (development), merged on top of site.toml.
 # Show draft (_example) and _private (_example) pages in the dev server so the
 # status badges are easy to inspect. Production keeps them hidden via site.toml.
+
+[build]
+base = "/"
+
 [content]
 show_drafts  = true
 show_private = true

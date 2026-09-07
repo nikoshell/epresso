@@ -71,7 +71,8 @@ def discover_content_config(root: Path) -> list[Any]:
     sys.modules["_epresso_content_config"] = module
     # expose the site/project root so content.config can resolve paths relative
     # to the real site root (docs theme uses it for docs-source resolution).
-    module.epresso_root = root
+    # Injected via __dict__ (not an attribute set) so pyright accepts it.
+    module.__dict__["epresso_root"] = root
     spec.loader.exec_module(module)
     collections: list[Any] = []
     for value in vars(module).values():

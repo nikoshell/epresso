@@ -3,6 +3,8 @@ title: epresso
 description: A modern, Python-first static site generator.
 ---
 
+![epresso](/epresso.png)
+
 Welcome to **epresso** — a Python-first static site generator built around
 content collections, code-as-routes pages, and no-JavaScript-by-default output.
 

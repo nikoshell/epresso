@@ -1,5 +1,7 @@
 # epresso
 
+![epresso](themes/docs/public/epresso.png)
+
 A modern, **Python-first static site generator** — routes-as-code, content collections, deterministic + incremental builds, and a no-JavaScript-by-default philosophy.
 
 ```bash
