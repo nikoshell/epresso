@@ -1,0 +1,159 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    headings: list[dict] = []
+    placement: str = "inline"
+---
+
+{% if props.headings %}
+    <nav class="toc toc--{{ props.placement }}" aria-label="On this page">
+        <div class="toc-label">On this page</div>
+        <ul>
+            {% for h in props.headings %}
+                {% if h.depth <= 2 %}
+                    <li class="toc-depth-{{ h.depth }}"><a href="#{{ h.slug }}">{{ h.text }}</a></li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </nav>
+{% endif %}
+
+<script>
+    (function() {
+        "use strict";
+        if (window.__epressoTocSpy) return;
+        window.__epressoTocSpy = true;
+        var links = [];
+        var seen = {};
+        var headings = [];
+        Array.prototype.forEach.call(document.querySelectorAll(".toc a"), function(a) {
+            a.__tocTarget = a.getAttribute("href").slice(1);
+            links.push(a);
+            if (!seen[a.__tocTarget]) {
+                seen[a.__tocTarget] = true;
+                var el = document.getElementById(a.__tocTarget);
+                if (el) headings.push(el);
+            }
+        });
+        if (!links.length || !headings.length) return;
+
+        function setActive(idx) {
+            var target = idx >= 0 && idx < headings.length ? headings[idx].id : null;
+            links.forEach(function(a) {
+                a.classList.toggle("active", a.__tocTarget === target);
+            });
+        }
+
+        function onScroll() {
+            var offset = 90; /* sticky header + a little */
+            var current = -1;
+            headings.forEach(function(h, i) {
+                if (h.getBoundingClientRect().top <= offset) current = i;
+            });
+            setActive(current);
+        }
+        window.addEventListener("scroll", onScroll, {
+            passive: true
+        });
+        onScroll();
+    })();
+</script>
+
+<style>
+    .toc-label {
+        font: var(--text-caption);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: var(--space-sm);
+    }
+
+    .toc--rail .toc-label {
+        font-size: 0.82rem;
+    }
+
+    .toc ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .toc--rail ul {
+        border-left: 1px solid var(--line);
+    }
+
+    .toc li {
+        position: relative;
+        margin: 0.15rem 0;
+    }
+
+    .toc--rail li {
+        margin: 0.2rem 0;
+    }
+
+    .toc a {
+        display: block;
+        color: var(--muted);
+        font-size: 0.92rem;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        padding-left: 16px;
+    }
+
+    .toc--rail a {
+        font-size: 0.9rem;
+        line-height: 1.4;
+    }
+
+    .toc a:hover {
+        color: var(--ink);
+        text-decoration: none;
+    }
+
+    .toc a.active {
+        color: var(--accent);
+    }
+
+    .toc li a.active::before {
+        content: "";
+        position: absolute;
+        left: -1px;
+        top: 4px;
+        bottom: 4px;
+        width: 2px;
+        background: var(--accent);
+    }
+
+    .toc-depth-2 {
+        padding-left: 16px;
+    }
+
+    .toc--inline {
+        border-left: 1px solid var(--line);
+        margin: 0 0 var(--space-xl);
+        padding-left: var(--space-sm);
+    }
+
+    .toc--rail {
+        grid-area: toc;
+        display: none;
+        position: sticky;
+        top: calc(var(--header-h) + var(--space-lg));
+        align-self: start;
+        padding: var(--space-lg) var(--space-md);
+        max-height: calc(100vh - var(--header-h) - var(--space-2xl));
+        overflow-y: auto;
+    }
+
+    @media (min-width: 1281px) {
+        .toc--inline {
+            display: none;
+        }
+
+        .toc--rail {
+            display: block;
+        }
+    }
+</style>

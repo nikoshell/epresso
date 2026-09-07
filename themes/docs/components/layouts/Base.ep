@@ -1,0 +1,41 @@
+---
+---
+
+<!doctype html>
+<html lang="{{ site.config.site.language or 'en' }}">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><slot name="title">{{ site.config.site.name }}</slot></title>
+        <meta name="description" content="{{ site.config.site.description }}">
+        <script is:inline>
+            (function() {
+                function systemTheme() {
+                    return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+                }
+                var mode = "system";
+                try {
+                    var stored = localStorage.getItem("epresso-theme");
+                    if (stored === "light" || stored === "dark" || stored === "system") mode = stored;
+                } catch (e) {
+        /* unavailable — fall through to system */ }
+                document.documentElement.setAttribute("data-theme", mode === "system" ? systemTheme() : mode);
+                document.documentElement.setAttribute("data-theme-mode", mode);
+            })();
+        </script>
+        <link rel="stylesheet" href="{{ asset('global.css') }}">
+        <slot name="head" />
+    </head>
+    <body>
+        <a class="skip-link" href="#main">Skip to content</a>
+
+        <Header />
+
+        <slot />
+
+        <Footer />
+
+        <SearchOverlay />
+        <ImageLightbox />
+    </body>
+</html>

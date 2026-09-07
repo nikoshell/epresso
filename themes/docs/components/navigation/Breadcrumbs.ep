@@ -1,0 +1,54 @@
+---
+from pydantic import BaseModel
+from markupsafe import Markup, escape
+
+
+class Props(BaseModel):
+    crumbs: list[dict] = []
+
+
+def render(crumbs: list[dict]) -> Markup:
+    """Render crumb items joined by ``/`` separators."""
+
+    def one(c: dict) -> str:
+        label = escape(c.get("label", ""))
+        if c.get("current"):
+            return f'<span class="crumb-cur">{label}</span>'
+        href = c.get("href")
+        return f'<a href="{escape(href)}">{label}</a>' if href else f"<span>{label}</span>"
+
+    sep = '<span class="crumb-sep">/</span>'
+    return Markup(sep.join(one(c) for c in crumbs))
+---
+
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+    {{ render(props.crumbs) }}
+</nav>
+
+<style>
+    .breadcrumbs {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-xs);
+        font-size: 0.82rem;
+        color: var(--muted);
+        margin-bottom: var(--space-md);
+    }
+
+    .breadcrumbs a {
+        color: var(--muted);
+    }
+
+    .breadcrumbs a:hover {
+        color: var(--accent);
+    }
+
+    .breadcrumbs .crumb-cur {
+        color: var(--ink);
+    }
+
+    .breadcrumbs .crumb-sep {
+        opacity: 0.55;
+    }
+</style>

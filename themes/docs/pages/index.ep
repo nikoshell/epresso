@@ -1,0 +1,18 @@
+---
+from epresso.routing import Route
+
+
+def get_static_paths():
+    overview = next((d for d in site.get_collection("docs") if d.id == ""), None)
+    if overview is None:
+        return []
+    return [Route(path="/", data=overview, cache_key=overview.digest)]
+---
+
+<Doc title={site.config.site.name} current="" headings={[]}>
+    <article class="doc">
+        <h1>{{ props.title }}</h1>
+        {% if props.description %}<p class="doc-description">{{ props.description }}</p>{% endif %}
+        <Markdown content={content} />
+    </article>
+</Doc>

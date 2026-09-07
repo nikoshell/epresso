@@ -1,0 +1,50 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+dist/
+build/
+
+# docs/guides/build is a docs category, not a build artifact
+!docs/guides/build/
+!docs/guides/build/**
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.cache/
+.coverage.xml
+*.cover
+
+# Type checking
+.mypy_cache/
+.pyright/
+.pytype/
+
+# Linting
+.ruff_cache/
+
+# Build
+*.tar.gz
+*.whl
+
+# Tooling / misc
+.DS_Store
+*.log

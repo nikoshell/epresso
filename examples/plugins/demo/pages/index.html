@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plugin demo</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="hero">
+      <p class="kicker">epresso · plugins</p>
+      <h1>Plugin demo</h1>
+      <p class="lede">Three plugins are wired into this project. Everything below is produced at build time.</p>
+    </header>
+
+    <section class="card">
+      <h2>Greeter</h2>
+      <p class="hint">
+        The <code>greeter</code> plugin adds a <code>greeting()</code> global and a
+        <code>shout</code> filter through its <code>on_setup</code> hook.
+      </p>
+      <p class="out"><em>{{ greeting() }}</em> · “{{ "shout this" | shout }}”</p>
+    </section>
+
+    <section class="card">
+      <h2>Quotes</h2>
+      <p class="hint">Loaded from a <code>quotes</code> collection registered by a plugin.</p>
+      <ul class="quotes">
+        {% for q in get_collection('quotes') %}
+          <li>
+            <blockquote>{{ q.data.text }}</blockquote>
+            <cite>— {{ q.data.author }}</cite>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Code</h2>
+      <p class="hint">
+        The <code>watermark</code> plugin is a pure HTML transform; it stamps a
+        “Made by epresso” pill on every code block.
+      </p>
+      <pre>pip install epresso
+epresso new blog mysite
+epresso dev</pre>
+    </section>
+  </main>
+</body>
+</html>

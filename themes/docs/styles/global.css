@@ -1,0 +1,192 @@
+/* epresso docs theme — global stylesheet: design tokens, self-hosted fonts, and page base.
+   Everything here is document-global (colors, fonts, resets). Component-owned styles
+   live scoped in their own .ep file; the doc layout grid lives in layouts/Doc.ep. */
+/* ── Tokens · light-dark ────────────────── */
+:root {
+  color-scheme: dark;
+
+  --bg: light-dark(#fafbfc, #0f1117);
+  --surface: light-dark(#ffffff, #171a21);
+  --ink: light-dark(#1a1d23, #e8ecf1);
+  --muted: light-dark(#5c6370, #9aa2b1);
+  --line: light-dark(#D2D5D9, #2a2f3a);
+  --accent: light-dark(#087a44, #3ecf8e);
+  --accent-bg: light-dark(#0c9d58, #3ecf8e);
+  --accent-ink: light-dark(#1a1d23, #0f1117);
+  --accent-strong: light-dark(#06572f, #5fe0a6);
+  --accent-soft: light-dark(#e9f7f0, #123128);
+  --success: light-dark(#087a44, #5fe0a6);
+  --warning: light-dark(#a16a00, #e0b45a);
+  --error: light-dark(#c23b3b, #e06a6a);
+
+  --transition-theme: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+
+  --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+  --text-h1: 500 44px/1.1 var(--font-display);
+  --text-h2: 600 30px/1.2 var(--font-display);
+  --text-h3: 600 20px/1.3 var(--font-body);
+  --text-body: 400 16px/1.6 var(--font-body);
+  --text-small: 400 13px/1.5 var(--font-body);
+  --text-caption: 500 11px/1.5 var(--font-body);
+
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px;
+  --space-xl: 32px; --space-2xl: 48px; --space-3xl: 64px;
+  --radius: 8px; --radius-sm: 6px;
+  --shadow-sm: light-dark(0 1px 2px rgba(16, 20, 28, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4));
+  --shadow-md: light-dark(0 4px 16px rgba(16, 20, 28, 0.1), 0 4px 16px rgba(0, 0, 0, 0.5));
+  --shadow-lg: light-dark(0 16px 40px rgba(16, 20, 28, 0.16), 0 16px 40px rgba(0, 0, 0, 0.6));
+  --dur-fast: 150ms; --dur-normal: 250ms; --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  --sidebar-w: 16.5rem;
+  --content-max: 46rem;
+  --header-h: 3.5rem;
+}
+
+/* The theme toggle sets data-theme on <html>; flip color-scheme so the
+   light-dark() tokens above resolve to the right palette. */
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* ── Fonts · self-hosted (no Google CDN, no swap on load) ── */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/IBMPlexMono-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 100 900; /* variable font */
+  font-display: swap;
+  src: url('/fonts/IBMPlexSans.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 100 900; /* variable font */
+  font-display: swap;
+  src: url('/fonts/SpaceGrotesk.woff2') format('woff2');
+}
+
+/* ── Reset & page base ───────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 0;
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  font: var(--text-body);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  transition: var(--transition-theme);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0 0 var(--space-md);
+  text-wrap: balance;
+}
+
+h1 {
+  font: var(--text-h1);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font: var(--text-h2);
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font: var(--text-h3);
+}
+
+p {
+  margin: 0 0 var(--space-md);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Accessibility helpers ───────────────── */
+.skip-link {
+  position: absolute;
+  left: var(--space-md);
+  top: -100%;
+  z-index: 100;
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  transition: top var(--dur-fast) var(--ease);
+}
+
+.skip-link:focus {
+  top: var(--space-md);
+  text-decoration: none;
+}
+
+/* icon buttons: size the inner (caller-authored) SVG regardless of which
+   component authored it (authorship scoping means a primitive can't style the
+   SVG it receives). */
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

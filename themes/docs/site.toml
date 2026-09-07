@@ -1,0 +1,45 @@
+plugins = ["epresso_pandoc", "epresso_mkdocs_tabs"]
+
+[site]
+name = "epresso"
+url = "https://nikoshell.github.io/epresso/"
+language = "en"
+description = "A modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds, and a no-JavaScript-by-default philosophy."
+repository = "https://github.com/nikoshell/epresso"
+branch = "main"
+
+[build]
+trailing_slash = "always"
+compress_html = true
+components = "components"
+layouts = "components/layouts"
+
+[content]
+# Production build: hide draft / _private pages (demo pages are draft/private).
+# site.development.toml overrides these so `epresso dev` still previews them.
+show_drafts  = false
+show_private = false
+
+[search]
+enabled = true
+index = "search-index.json"
+
+[markdown]
+components = ["Highlight"]  # render fenced code blocks server-side
+code_component = "Highlight"
+
+[seo.rss]
+# Disabled: docs are served at their flattened path; the rss url_template can't
+# express that. A theme-owned feed endpoint would be needed to fix this.
+enabled = false
+collection = "docs"
+path = "/rss.xml"
+url_template = ""
+
+[theme]
+# Which subdir of the source repo holds the docs (e.g. "docs" or "_posts").
+# Override with the EPRESSO_DOCS_DIR env var.
+docs_dir = "docs"
+# The repo this theme documents when run at its own directory (self-build), as a
+# path relative to this theme dir. No parent-walking: it's an explicit declaration.
+repo = "../.."

@@ -1,0 +1,16 @@
+---
+---
+
+<footer class="site-footer">
+  <span>Built with 🖤 and <a href="https://github.com/nikoshell/epresso">epresso</a></span>
+</footer>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--line);
+    padding: var(--space-md) var(--space-lg);
+    color: var(--muted);
+    font-size: var(--text-small);
+    text-align: center;
+  }
+</style>

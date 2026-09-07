@@ -1,0 +1,4 @@
+[site]
+name = "Plugin Demo"
+url = "https://example.com"
+description = "A tiny site showing local example plugins."

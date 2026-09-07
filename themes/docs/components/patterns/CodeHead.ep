@@ -1,0 +1,189 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    lang: str = ""
+    file: str = ""
+---
+
+<div class="code-head">
+    <span class="code-dots"><span></span><span></span><span></span></span>
+    {% if props.file %}<span class="code-file">{{ props.file }}</span>{% endif %}
+    <span class="code-trailing">
+        {% if props.lang %}<span class="code-lang">{{ props.lang }}</span>{% endif %}
+        <button type="button" class="code-btn code-lines-btn" aria-pressed="false" aria-label="Show line numbers" title="Show line numbers">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9 4.75A.75.75 0 0 1 9.75 4h4a.75.75 0 0 1 .53 1.28l-1.89 1.892c.312.076.604.18.867.319.742.391 1.244 1.063 1.244 2.005 0 .653-.231 1.208-.629 1.627-.386.408-.894.653-1.408.777-1.01.243-2.225.063-3.124-.527a.751.751 0 0 1 .822-1.254c.534.35 1.32.474 1.951.322.306-.073.53-.201.67-.349.129-.136.218-.32.218-.596 0-.308-.123-.509-.444-.678-.373-.197-.98-.318-1.806-.318a.75.75 0 0 1-.53-1.28l1.72-1.72H9.75A.75.75 0 0 1 9 4.75Zm-3.587 5.763c-.35-.05-.77.113-.983.572a.75.75 0 1 1-1.36-.632c.508-1.094 1.589-1.565 2.558-1.425 1 .145 1.872.945 1.872 2.222 0 1.433-1.088 2.192-1.79 2.681-.308.216-.571.397-.772.573H7a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75c0-.69.3-1.211.67-1.61.348-.372.8-.676 1.15-.92.8-.56 1.18-.904 1.18-1.474 0-.473-.267-.69-.587-.737ZM5.604.089A.75.75 0 0 1 6 .75v4.77h.711a.75.75 0 0 1 0 1.5H3.759a.75.75 0 0 1 0-1.5H4.5V2.15l-.334.223a.75.75 0 0 1-.832-1.248l1.5-1a.75.75 0 0 1 .77-.037Z"/></svg>
+        </button>
+        <button type="button" class="code-btn code-copy" aria-label="Copy code" title="Copy code">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+        </button>
+    </span>
+</div>
+
+<script>
+    (function() {
+        "use strict";
+        var copyIcon =
+            '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>';
+        var checkIcon =
+            '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>';
+
+        document.querySelectorAll("pre.highlight").forEach(function(pre) {
+            var head = pre.querySelector(".code-head");
+            var body = pre.querySelector(".code-body");
+            if (!head || !body) return;
+            var linesBtn = head.querySelector(".code-lines-btn");
+            var copyBtn = head.querySelector(".code-copy");
+
+            if (linesBtn) {
+                linesBtn.addEventListener("click", function() {
+                    var on = body.classList.toggle("no-numbers");
+                    linesBtn.setAttribute("aria-pressed", String(!on));
+                    linesBtn.setAttribute("aria-label", on ? "Show line numbers" : "Hide line numbers");
+                    linesBtn.setAttribute("title", on ? "Show line numbers" : "Hide line numbers");
+                });
+            }
+
+            body.addEventListener("click", function(e) {
+                var line = e.target.closest(".code-line");
+                if (line) line.classList.toggle("selected");
+            });
+
+            if (copyBtn) {
+                copyBtn.addEventListener("click", function() {
+                    var sel = body.querySelectorAll(".code-line.selected");
+                    var text = sel.length ?
+                    Array.prototype.map.call(sel, function(l) {
+                        return l.innerText;
+                    }).join("\n") :
+                        body.innerText;
+                    text = text.replace(/\n$/, "");
+                    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+                        .then(function() {
+                            copyBtn.innerHTML = checkIcon;
+                            copyBtn.classList.add("copied");
+                            copyBtn.setAttribute("aria-label", "Copied");
+                            setTimeout(function() {
+                                copyBtn.innerHTML = copyIcon;
+                                copyBtn.classList.remove("copied");
+                                copyBtn.setAttribute("aria-label", "Copy code");
+                            }, 1600);
+                        })
+                        .catch(function() {});
+                });
+            }
+        });
+    })();
+</script>
+
+<style>
+    .code-head {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        padding: 0.5rem var(--space-md);
+        background: light-dark(#F5F5F5, var(--bg));
+        border-bottom: 1px solid var(--line);
+        font-size: 0.75rem;
+    }
+
+    .code-dots {
+        display: inline-flex;
+        gap: 6px;
+        margin-right: var(--space-xs);
+    }
+
+    .code-dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: light-dark(#D2D5D9, #262A33);
+    }
+
+    .code-lang,
+    .code-file {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--muted);
+    }
+
+    .code-trailing {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+
+
+    .code-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7rem;
+        height: 1.7rem;
+        padding: 0;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--muted);
+        cursor: pointer;
+        transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .code-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .code-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .code-lines-btn[aria-pressed="true"] {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .code-btn svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    .code-copy {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.15rem 0.5rem;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-family: var(--font-body);
+        cursor: pointer;
+        transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+    }
+
+    .code-copy:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+
+    .code-copy:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+    }
+
+    .code-copy svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    .code-copy.copied {
+        color: var(--success);
+        border-color: var(--success);
+    }
+</style>

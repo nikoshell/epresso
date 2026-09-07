@@ -1,0 +1,118 @@
+---
+---
+
+<header class="site-header">
+    <div class="site-header-inner">
+        <a class="brand" href="{{ url('/') }}"><span class="brand-logo" role="img" aria-label="epresso"></span></a>
+        <nav class="header-nav">
+            <a class="header-home" href="{{ url('/') }}">Home</a>
+        </nav>
+        <div class="header-actions">
+            <SearchButton />
+            <ThemeToggle />
+            <GitHubLink />
+        </div>
+    </div>
+</header>
+
+<style>
+    .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line);
+    }
+
+    .site-header-inner {
+        max-width: 80rem;
+        margin: 0 auto;
+        height: var(--header-h);
+        display: grid;
+        align-items: center;
+        grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
+        grid-template-areas: "logo nav actions";
+    }
+
+    @media (min-width: 1281px) {
+        .site-header-inner {
+            grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
+            grid-template-areas: "logo nav actions";
+        }
+    }
+
+    @media (max-width: 860px) {
+        .site-header-inner {
+            grid-template-columns: auto 1fr auto;
+            grid-template-areas: "logo nav actions";
+        }
+    }
+
+    .brand {
+        grid-area: logo;
+        padding: 8px var(--space-md) 0;
+    /* left/right only, same as .sidebar */
+        font: 600 1.05rem/1 var(--font-display);
+        letter-spacing: -0.01em;
+        color: var(--ink);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-sm);
+    }
+
+    .brand::before {
+        margin: 0 0 12px 0px;
+        content: "";
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--epresso-env-dot, var(--accent));
+    }
+
+    .brand:hover {
+        text-decoration: none;
+    }
+
+/* The epresso wordmark svg is monochrome (#f6f4f1, for the dark header).
+       An external <img> can't be recolored by page CSS, so render it as a mask
+       over a theme-aware background color instead: #1b1b1b on light, #f6f4f1 on
+       dark (color-scheme is flipped by the theme toggle). */
+    .brand-logo {
+        display: block;
+        height: calc(var(--header-h) * 0.52); /* ~29px at 56px header; width follows 16:5 */
+        aspect-ratio: 16 / 5;
+    /* epresso.svg intrinsic 320x100 */
+        background-color: light-dark(#1b1b1b, #f6f4f1);
+        -webkit-mask: url("/epresso.svg") no-repeat center / 100% 100%;
+        mask: url("/epresso.svg") no-repeat center / 100% 100%;
+    }
+
+    .header-nav {
+        grid-area: nav;
+        justify-self: start;
+        padding: 0 var(--space-xl) 0 clamp(var(--space-lg), 4vw, var(--space-3xl));
+    /* same left/right as .content */
+    }
+
+    .header-home {
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .header-home:hover {
+        color: var(--ink);
+        text-decoration: none;
+    }
+
+    .header-actions {
+        grid-area: actions;
+        justify-self: start;
+        padding: 0 var(--space-md);
+    /* same left/right as .toc--rail */
+        display: flex;
+        align-items: center;
+        gap: var(--space-xs);
+    }
+</style>

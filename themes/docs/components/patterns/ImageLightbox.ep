@@ -1,0 +1,119 @@
+---
+---
+
+<div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+    <button type="button" class="lightbox-close" aria-label="Close image viewer">&#215;</button>
+    <img class="lightbox-img" alt="" />
+    <div class="lightbox-caption"></div>
+</div>
+
+<script>
+    (function() {
+        "use strict";
+        var lb = document.getElementById("lightbox");
+        if (!lb) return;
+        var img = lb.querySelector(".lightbox-img");
+        var caption = lb.querySelector(".lightbox-caption");
+        var closeBtn = lb.querySelector(".lightbox-close");
+        var images = Array.prototype.slice.call(document.querySelectorAll(".prose img"));
+        var current = -1;
+
+        function open(i) {
+            if (i < 0 || i >= images.length) return;
+            current = i;
+            var src = images[i];
+            img.src = src.currentSrc || src.src;
+            img.alt = src.alt || "";
+            caption.textContent = src.alt || "";
+            lb.classList.add("open");
+            if (closeBtn) closeBtn.focus();
+        }
+
+        function close() {
+            lb.classList.remove("open");
+            img.src = "";
+            current = -1;
+        }
+
+        function move(d) {
+            if (current < 0 || !images.length) return;
+            open((current + d + images.length) % images.length);
+        }
+
+        images.forEach(function(im, i) {
+            im.addEventListener("click", function(e) {
+                e.preventDefault();
+                open(i);
+            });
+        });
+        if (closeBtn) closeBtn.addEventListener("click", close);
+        lb.addEventListener("click", function(e) {
+            if (e.target === lb || e.target === img) close();
+        });
+        document.addEventListener("keydown", function(e) {
+            if (!lb.classList.contains("open")) return;
+            if (e.key === "Escape") close();
+            else if (e.key === "ArrowLeft") move(-1);
+            else if (e.key === "ArrowRight") move(1);
+        });
+    })();
+</script>
+
+<style>
+    .lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(6, 8, 12, 0.9);
+        backdrop-filter: blur(4px);
+        padding: 2rem;
+    }
+
+    .lightbox.open {
+        display: flex;
+    }
+
+    .lightbox-img {
+        max-width: 92vw;
+        max-height: 92vh;
+        object-fit: contain;
+        border-radius: 4px;
+        box-shadow: var(--shadow-lg);
+    }
+
+    .lightbox-close {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 2.5rem;
+        height: 2.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.6rem;
+        line-height: 1;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: background var(--dur-fast) var(--ease);
+    }
+
+    .lightbox-close:hover {
+        background: rgba(255, 255, 255, 0.22);
+    }
+
+    .lightbox-caption {
+        position: absolute;
+        bottom: 1rem;
+        left: 0;
+        right: 0;
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.85rem;
+    }
+</style>

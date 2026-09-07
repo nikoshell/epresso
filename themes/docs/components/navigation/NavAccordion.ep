@@ -1,0 +1,244 @@
+---
+from markupsafe import Markup, escape
+
+ICONS = {
+    "caret": '<path fill="currentColor" d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>',
+}
+
+
+def icon(name: str, class_name: str = "", size: int = 14) -> str:
+    """Wrap an icon path in an ``<svg>`` (viewBox 16×16, currentColor).
+
+    ``size`` sets the rendered width/height so the icon isn't the SVG default.
+    """
+    cls = f' class="{class_name}"' if class_name else ""
+    dims = f' width="{size}" height="{size}"'
+    return f'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"{dims}{cls}>{ICONS[name]}</svg>'
+
+
+def _build_tree(docs):
+    """Group docs into a nested tree of ``{hub, dirs, docs}`` (pure data)."""
+    root: dict = {"hub": None, "dirs": {}, "docs": []}
+    for d in docs:
+        if d.id == "":
+            continue
+        c = d.computed or {}
+        node = root
+        for part in c.get("group_path", []):
+            node = node["dirs"].setdefault(part, {"hub": None, "dirs": {}, "docs": []})
+        if c.get("is_hub") and c.get("group_path"):
+            node["hub"] = d
+        else:
+            node["docs"].append(d)
+    return root
+
+
+def render_sidebar(docs, current: str) -> Markup:
+    """Alternative sidebar:
+    - no folder/file directory icons (only a caret on collapsible sections)
+    - the FIRST level is always expanded (no collapse affordance)
+    - deeper directories open/close independently via native <details>
+      (no same-level auto-collapse).
+    """
+    docs = list(docs)
+    by_id = {d.id: d for d in docs}
+    root = _build_tree(docs)
+    active_entry = by_id.get(current)
+    active_path = (
+        list(active_entry.computed.get("group_path", [])) if active_entry else []
+    )
+
+    dir_min: dict[tuple, int] = {}
+    for d in docs:
+        gp = list((d.computed or {}).get("group_path", []))
+        o = int((d.computed or {}).get("order", 0))
+        for k in range(1, len(gp) + 1):
+            key = tuple(gp[:k])
+            if o < dir_min.get(key, 10**9):
+                dir_min[key] = o
+
+    def inner_for(node):
+        hub = node["hub"]
+        label = hub.data.title if hub else ""
+        if hub:
+            active = ' class="active" aria-current="page"' if current == hub.id else ""
+            return f'<a href="/{escape(hub.id)}/"{active}>{escape(label)}</a>'
+        return f"<span>{escape(label)}</span>"
+
+    def render(node, path):
+        parts = ['<ul class="tree">']
+        for name in sorted(
+            node["dirs"].keys(),
+            key=lambda n: (dir_min.get(tuple(path) + (n,), 10**9), n),
+        ):
+            child = node["dirs"][name]
+            child_path = path + [name]
+            hub = child["hub"]
+            depth = len(child_path)
+
+            # A lone hub index = a plain leaf link (no container).
+            if hub and not (child["dirs"] or child["docs"]):
+                active = ' class="active" aria-current="page"' if hub.id == current else ""
+                parts.append(
+                    f'<li class="tree-leaf"><a href="/{escape(hub.id)}/"{active}>{escape(hub.data.title)}</a></li>'
+                )
+                continue
+
+            children_html = render(child, child_path)
+            inner = inner_for(child)
+
+            if depth == 1:
+                # FIRST level: always expanded, never collapsible, no caret/icons.
+                parts.append(
+                    f'<li class="tree-dir tree-top"><div class="tree-head">{inner}</div>{children_html}</li>'
+                )
+            else:
+                on_path = bool(active_path) and active_path[: len(child_path)] == child_path
+                opened = (len(active_path) > len(child_path) and on_path) or (
+                    active_path == child_path and active_path and (hub is None or current != hub.id)
+                )
+                parts.append(
+                    f'<li class="tree-dir"><details{" open" if opened else ""}>'
+                    f"<summary>{icon('caret', 'tree-caret', 14)}{inner}</summary>"
+                    f"{children_html}</details></li>"
+                )
+
+        for d in sorted(
+            node["docs"], key=lambda x: (x.computed.get("order", 0), x.data.title.lower())
+        ):
+            active = ' class="active" aria-current="page"' if d.id == current else ""
+            parts.append(
+                f'<li class="tree-leaf"><a href="/{escape(d.id)}/"{active}>{escape(d.data.title)}</a></li>'
+            )
+        parts.append("</ul>")
+        return "".join(parts)
+
+    return Markup(render(root, []))
+---
+
+<aside class="sidebar" aria-label="Documentation navigation">
+    <nav>
+        {{ render_sidebar(props.docs, props.current) }}
+    </nav>
+</aside>
+
+<style>
+    .sidebar {
+        grid-area: sidebar;
+        padding: var(--space-xl) var(--space-sm);
+        position: sticky;
+        top: var(--header-h);
+        align-self: start;
+        max-height: calc(100vh - var(--header-h));
+        overflow-y: auto;
+    }
+
+    .tree {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .tree ul {
+        list-style: none;
+        margin: 0;
+        padding: 0 0 0 0.9rem;
+        border-left: 1px solid var(--line);
+        margin-left: 0.4rem;
+    }
+
+    .tree li {
+        position: relative;
+    }
+
+    /* collapsible (depth >= 2) sections */
+    .tree details {
+        margin: 0;
+    }
+
+    .tree summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.28rem 0.4rem;
+        border-radius: var(--radius-sm);
+        color: var(--ink);
+        font-weight: 500;
+        cursor: pointer;
+        font-size: 0.92rem;
+        line-height: 1.4;
+    }
+
+    .tree summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .tree summary:hover {
+        background: var(--surface);
+    }
+
+    .tree-caret {
+        transition: transform 0.12s ease;
+        color: var(--muted);
+        flex: none;
+    }
+
+    .tree details[open] > summary .tree-caret {
+        transform: rotate(90deg);
+    }
+
+    /* FIRST level: always expanded, not a <details>, no caret/icon */
+    .tree-top > .tree-head {
+        display: block;
+        padding: 0.28rem 0.4rem;
+        margin: 0.15rem 0;
+        border-radius: var(--radius-sm);
+        color: var(--ink);
+        font-weight: 600;
+        font-size: 0.92rem;
+        line-height: 1.4;
+    }
+
+    .tree summary a,
+    .tree-head a {
+        color: var(--ink);
+    }
+
+    .tree a {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.28rem 0.4rem;
+        border-radius: var(--radius-sm);
+        color: var(--muted);
+        font-size: 0.92rem;
+        line-height: 1.4;
+        text-decoration: none;
+    }
+
+    .tree a:hover {
+        color: var(--ink);
+        background: var(--surface);
+    }
+
+    .tree a.active {
+        color: var(--accent);
+        background: var(--accent-soft);
+    }
+
+    @media (max-width: 860px) {
+        .tree ul {
+            border-left: none;
+            padding-left: 0;
+            margin-left: 0;
+        }
+
+        .sidebar {
+            position: static;
+            max-height: none;
+            border-bottom: 1px solid var(--line);
+            padding: var(--space-md);
+        }
+    }
+</style>

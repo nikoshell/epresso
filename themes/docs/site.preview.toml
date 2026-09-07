@@ -1,0 +1,6 @@
+# `--env preview` / `EPRESSO_ENV=preview` runs this environment, merged on top
+# of site.toml. Like development, show draft (_example) and _private (private)
+# pages for a staged review build. Production keeps them hidden via site.toml.
+[content]
+show_drafts  = true
+show_private = false

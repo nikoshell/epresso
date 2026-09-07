@@ -1,0 +1,64 @@
+---
+from epresso.routing import Route
+
+
+def crumbs_for(by_id: dict, path: str) -> list[dict]:
+    """Breadcrumb items for a doc path: Home, ancestor dirs (linked when they're
+    hub pages), then the current doc (plain)."""
+    segs = [s for s in path.split("/") if s]
+    out: list[dict] = [{"label": "Home", "href": "/", "current": False}]
+    for i in range(len(segs) - 1):  # ancestor dirs, up to (not incl.) the leaf
+        prefix = "/".join(segs[: i + 1])
+        hub = by_id.get(prefix)
+        if hub:
+            out.append({"label": hub.data.title, "href": f"/{hub.id}/", "current": False})
+        else:
+            out.append({"label": segs[i].replace("-", " ").title(), "current": False})
+    leaf = by_id.get(path)
+    label = leaf.data.title if leaf else (segs[-1] if segs else "").replace("-", " ").title()
+    out.append({"label": label, "current": True})
+    return out
+
+
+def get_static_paths():
+    all_docs = list(site.get_collection("docs"))
+    docs = sorted((d for d in all_docs if d.id != ""), key=lambda d: (d.computed or {}).get("order", 0))
+    by_id = {d.id: d for d in all_docs}
+    n = len(docs)
+    routes = []
+    for i, d in enumerate(docs):
+        c = d.computed or {}
+        prev = docs[(i - 1) % n] if n > 1 else None
+        nxt = docs[(i + 1) % n] if n > 1 else None
+        routes.append(
+            Route(
+                path=f"/{d.id}/",
+                params={
+                    "slug": d.id,
+                    "crumbs": crumbs_for(by_id, d.id),
+                    "source": c.get("source", ""),
+                    "prev": {"url": f"/{prev.id}/", "title": prev.data.title} if prev else None,
+                    "next": {"url": f"/{nxt.id}/", "title": nxt.data.title} if nxt else None,
+                    "headings": c.get("headings", []),
+                },
+                data=d,
+                cache_key=d.digest,
+            )
+        )
+    return routes
+---
+
+<Doc title={props.title + ' · ' + site.config.site.name} current={params.slug | default('')} headings={params.headings | default([])}>
+    <Breadcrumbs crumbs={params.crumbs} />
+    <PageActions source={params.source} prev={params.prev} next={params.next} />
+    <article class="doc">
+        <h1>{{ props.title }}</h1>
+        {% if props.description %}<p class="doc-description">{{ props.description }}</p>{% endif %}
+
+        <Toc headings={params.headings} />
+
+        <Markdown content={content} />
+
+        <Pager prev={params.prev} next={params.next} />
+    </article>
+</Doc>

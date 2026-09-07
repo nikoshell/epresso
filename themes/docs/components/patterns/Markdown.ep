@@ -1,0 +1,128 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    content: str = ""
+---
+
+<div class="prose">{{ expand_md_components(props.content) }}</div>
+
+<style>
+    .prose h2 {
+        font: var(--text-h2);
+        margin: var(--space-2xl) 0 var(--space-md);
+        padding-bottom: var(--space-sm);
+        border-bottom: 1px solid var(--line);
+        scroll-margin-top: calc(var(--header-h) + var(--space-md));
+    }
+
+    .prose h3,
+    .prose h4 {
+        scroll-margin-top: calc(var(--header-h) + var(--space-md));
+    }
+
+    .prose h3 {
+        font: var(--text-h3);
+        margin: var(--space-xl) 0 var(--space-sm);
+    }
+
+    .prose p,
+    .prose ul,
+    .prose ol {
+        margin: 0 0 var(--space-md);
+    }
+
+    .prose ul,
+    .prose ol {
+        padding-left: 1.25rem;
+    }
+
+    .prose li {
+        margin: 0.25rem 0;
+    }
+
+    .prose li::marker {
+        color: var(--accent);
+    }
+
+    .prose strong {
+        font-weight: 600;
+    }
+
+    .prose :not(pre)>code {
+        background: light-dark(#eef1f5, var(--surface));
+        color: var(--ink);
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-size: 0.88em;
+        font-family: var(--font-mono);
+        border: 1px solid light-dark(#d8dee6, var(--line));
+    }
+
+    .prose img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: var(--space-md) auto;
+        border-radius: var(--radius-sm);
+        cursor: zoom-in;
+    }
+
+    .prose blockquote {
+        margin: 0 0 var(--space-md);
+        padding: var(--space-xs) var(--space-md);
+        border-left: 3px solid var(--accent);
+        background: var(--accent-soft);
+        border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .prose blockquote p {
+        margin: var(--space-sm) 0;
+    }
+
+    .prose table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0 0 var(--space-md);
+        font-size: 0.95rem;
+    }
+
+    .prose th,
+    .prose td {
+        border: 1px solid var(--line);
+        padding: var(--space-sm) var(--space-md);
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .prose th {
+        background: var(--surface);
+        font-weight: 600;
+        font-family: var(--font-display);
+    }
+
+    .prose a code {
+        color: inherit;
+    }
+
+    .heading-anchor {
+        color: var(--muted);
+        opacity: 0;
+        margin-left: var(--space-xs);
+        text-decoration: none;
+        font-size: 0.75em;
+        vertical-align: 0.1em;
+    }
+
+    .heading-anchor:hover {
+        color: var(--accent);
+    }
+
+    .prose h1:hover .heading-anchor,
+    .prose h2:hover .heading-anchor,
+    .prose h3:hover .heading-anchor,
+    .prose h4:hover .heading-anchor {
+        opacity: 1;
+    }
+</style>
