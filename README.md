@@ -1,6 +1,6 @@
 # epresso
 
-![epresso](themes/docs/public/epresso.png)
+![epresso](https://raw.githubusercontent.com/nikoshell/epresso/main/themes/docs/public/epresso.png)
 
 A modern, **Python-first static site generator** — routes-as-code, content collections, deterministic + incremental builds, and a no-JavaScript-by-default philosophy.
 
@@ -29,7 +29,7 @@ epresso build   # deterministic, incremental → dist/
 - Assets: content-hashed `asset()`, `public/` passthrough, esbuild JS bundling, **PostCSS/Tailwind CSS** pipeline, **Pillow responsive images** (`image()` → WebP srcset).
 - **First-class client behavior** — a `.ep` component's `<script>` block is bundled (esbuild) page-level JS, injected before `</body>`. No separate islands/ dir.
 - Generated outputs: `sitemap.xml`, `robots.txt`, `404.html`, `search-index.json`, and an RSS/Atom helper.
-- **Plugin API** — a capability registry: named plugins with lifecycle hooks that receive a scoped `Capabilities` handle (never the raw `Site`), so extensions are deterministic and isolated. See the [plugin guide](docs/guides/extending/plugins.md).
+- **Plugin API** — a capability registry: named plugins with lifecycle hooks that receive a scoped `Capabilities` handle (never the raw `Site`), so extensions are deterministic and isolated. See the [plugin guide](https://github.com/nikoshell/epresso/blob/main/docs/guides/extending/plugins.md).
 - Theme scaffolding — `epresso new docs|blog`.
 
 ## Installation
@@ -416,7 +416,7 @@ template globals/filters, register content collections & Markdown extensions,
 and transform rendered HTML. Enable them from a project `plugins.py` (build with
 options via a factory) or `[plugins]` dotted paths in `site.toml`. Lifecycle
 hooks: `before_load`, `on_setup`, `after_load`, `before_build`, `after_build`,
-`on_assets`. See `examples/plugins/` and the [plugin guide](docs/guides/extending/plugins.md).
+`on_assets`. See `examples/plugins/` and the [plugin guide](https://github.com/nikoshell/epresso/blob/main/docs/guides/extending/plugins.md).
 
 ## Themes
 
@@ -480,7 +480,7 @@ epresso project is highlighted automatically:
 vim.opt.rtp:append("/path/to/epresso/extras/nvim")
 ```
 
-See [`extras/nvim/README.md`](extras/nvim/README.md) for details and LazyVim
+See [`extras/nvim/README.md`](https://github.com/nikoshell/epresso/blob/main/extras/nvim/README.md) for details and LazyVim
 instructions.
 
 ## License
