@@ -61,7 +61,7 @@
         function load() {
             if (loaded) return Promise.resolve();
             loaded = true;
-            return fetch("/search-index.json")
+            return fetch((window.EPRESSO_BASE || "") + "/search-index.json")
                 .then(function(r) {
                     return r.json();
                 })

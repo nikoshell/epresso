@@ -36,6 +36,9 @@ class BuildConfig(BaseModel):
     trailing_slash: str = "always"  # always | never | ignore
     clean_urls: bool = True
     compress_html: bool = False  # minify HTML output (safe: skips <pre>/<script>/<style>)
+    # Public base path prepended to root-relative URLs at build time (e.g.
+    # "/epresso/" for a project GitHub Pages site). Empty = serve at root.
+    base: str = ""
     redirects: bool = True  # emit redirect pages from the `redirects` config (Option C)
     # Reserved for future i18n (single-locale for now).
 

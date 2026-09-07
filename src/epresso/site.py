@@ -378,6 +378,44 @@ class Site:
             html = fn(html, ctx)
         return html
 
+    def _apply_base_prefix(self, out_dir: Path) -> None:
+        """Prefix root-relative URLs with ``[build] base`` in built output.
+
+        Only runs when ``base`` is set (project Pages e.g. "/epresso/"). Rewrites
+        emitted HTML (href/src) and CSS (url()) so a project-Pages site resolves
+        its assets/scripts. Dev is unaffected (it serves at the root).
+        """
+        import re
+
+        base = (self.config.build.base or "").strip().strip("/")
+        if not base:
+            return
+        base = "/" + base + "/"
+        base_js = base.rstrip("/")
+        html_re = re.compile(r'((?:href|src)=["\'])/(?!/)')
+        css_re = re.compile(r"(url\([\"\']?)/(?!/)")
+        for f in out_dir.rglob("*"):
+            if not f.is_file():
+                continue
+            ext = f.suffix.lower()
+            if ext == ".html":
+                s = f.read_text(encoding="utf-8", errors="replace")
+                ns = html_re.sub(lambda m: m.group(1) + base, s)
+                # Let client scripts resolve root-relative data URLs under the base.
+                if "EPRESSO_BASE" not in ns and "</head>" in ns:
+                    ns = ns.replace(
+                        "</head>",
+                        f'<script>window.EPRESSO_BASE={base_js!r};</script></head>',
+                        1,
+                    )
+                if ns != s:
+                    f.write_text(ns, encoding="utf-8")
+            elif ext == ".css":
+                s = f.read_text(encoding="utf-8", errors="replace")
+                ns = css_re.sub(lambda m: m.group(1) + base, s)
+                if ns != s:
+                    f.write_text(ns, encoding="utf-8")
+
     def build(self, *, clean: bool = True, progress: Any | None = None) -> BuildResult:
         """Build the site. ``progress(i, total, path)`` is called per route during
         the render phase (used by the CLI to show a progress indicator)."""
@@ -466,6 +504,9 @@ class Site:
         outputs.write_404(self, out_dir, routes)
         outputs.write_search_index(self, out_dir, routes, rendered_pages)
         result.perf["outputs"] = time.monotonic() - _t
+
+        # Project-Pages support: prefix root-relative URLs with [build] base.
+        self._apply_base_prefix(out_dir)
 
         result.duration = time.monotonic() - start
         self.plugins.run_hook("after_build", self, result)
