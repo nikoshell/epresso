@@ -196,7 +196,7 @@
             var html = "";
             hits.forEach(function(h) {
                 var u = index.units[h.idx];
-                var href = u.url + (u.anchor ? "#" + u.anchor : "");
+                var href = (window.EPRESSO_BASE || "") + u.url + (u.anchor ? "#" + u.anchor : "");
                 html += '<a class="search-result" href="' + esc(href) + '">' +
                 '<span class="sr-title">' + esc(u.title) + "</span>" +
                 (u.section ? '<span class="sr-section">' + esc(u.section) + "</span>" : "") +

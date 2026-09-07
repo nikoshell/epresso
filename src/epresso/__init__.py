@@ -13,7 +13,7 @@ from .errors import (
 from .routing import paginate
 from .site import Site
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "BuildError",
