@@ -41,6 +41,8 @@ jobs:
 
       - name: Build docs site
         run: uv run --project . epresso build themes/docs
+        env:
+          EPRESSO_BASE: /epresso/
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

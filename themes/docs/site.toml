@@ -13,9 +13,8 @@ trailing_slash = "always"
 compress_html = true
 components = "components"
 layouts = "components/layouts"
-# Project GitHub Pages path; root-relative asset/script URLs are prefixed with
-# this at build time so they resolve under https://<user>.github.io/epresso/.
-base = "/epresso/"
+# Default public base is root (serve at /). Deploys on a project GitHub Pages
+# path set EPRESSO_BASE=/epresso/ (see .github/workflows/deploy-docs.yml).
 
 [content]
 # Production build: hide draft / _private pages (demo pages are draft/private).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -304,9 +305,15 @@ def load_config(root: Path | None = None, env: str | None = None) -> Config:
         if need_branch and branch:
             data.setdefault("site", {})["branch"] = branch
     try:
-        return Config.model_validate({**data, "root": root})
+        config = Config.model_validate({**data, "root": root})
     except Exception as e:  # noqa: BLE001 — pydantic ValidationError
         raise ConfigError(f"invalid configuration: {e}", path=str(path)) from e
+    # EPRESSO_BASE lets the deploy workflow set the public base path (e.g.
+    # "/epresso/" for a project GitHub Pages site). Default (unset) = serve at root.
+    _base = os.environ.get("EPRESSO_BASE", "").strip("/")
+    if _base:
+        config.build.base = "/" + _base + "/"
+    return config
 
 
 def dump_defaults() -> dict[str, Any]:
