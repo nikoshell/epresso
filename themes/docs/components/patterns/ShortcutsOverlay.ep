@@ -1,0 +1,254 @@
+---
+---
+
+<div id="shortcuts-overlay" class="shortcuts-overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" tabindex="-1">
+    <div class="shortcuts-box">
+        <div class="shortcuts-head">
+            <h2>Keyboard shortcuts</h2>
+            <button type="button" class="shortcuts-close" id="shortcuts-close" aria-label="Close keyboard shortcuts">
+                <Icon icon="close" />
+            </button>
+        </div>
+        <dl class="shortcuts-list">
+            <div>
+                <dt><kbd>Ctrl/⌘</kbd><kbd>K</kbd></dt><dd>Search the docs</dd>
+            </div>
+            <div>
+                <dt><kbd>?</kbd></dt><dd>Keyboard shortcuts</dd>
+            </div>
+            <div>
+                <dt><kbd>[</kbd><kbd>]</kbd></dt><dd>Previous / next doc</dd>
+            </div>
+            <div>
+                <dt><kbd>,</kbd><kbd>.</kbd></dt><dd>Previous / next section</dd>
+            </div>
+        </dl>
+    </div>
+</div>
+
+<script>
+(function() {
+    "use strict";
+    if (window.__epressoShortcuts) return;
+    window.__epressoShortcuts = true;
+    var overlay = document.getElementById("shortcuts-overlay");
+    if (!overlay) return;
+    var panel = overlay.querySelector(".shortcuts-box");
+
+
+    function isOpen() {
+        return overlay.classList.contains("open");
+    }
+
+    /* Never steal the key while the user is typing (docs search box,
+       a form, a contenteditable). */
+    function isTyping(el) {
+        if (!el) return false;
+        var tag = el.tagName;
+        return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable === true;
+    }
+
+    function open() {
+        /* Close any other overlay first (search / sidebar / menu). */
+        if (window.epressoPanelOpened) window.epressoPanelOpened("shortcuts");
+        overlay.classList.add("open");
+        overlay.focus();
+    }
+
+    function close() {
+        overlay.classList.remove("open");
+    }
+
+    /* Every global binding lives here, so the modifier and "not while
+       typing" rules exist once. Each entry broadcasts epresso:shortcut and
+       the component that owns the action listens for its own name. Bare
+       keys (?, [, ], ,, .) are ignored while typing; modified ones (Ctrl/⌘K)
+       work anywhere, as they do in most editors. */
+    /* Actions needing another component's state are broadcast (see the
+       search overlay and the ToC); ones that are just "follow a link" are
+       done here, off the hooks the pager exposes. */
+    function follow(attr) {
+        var link = document.querySelector("[" + attr + "]");
+        var href = link && link.getAttribute("href");
+        if (href) location.href = href;
+    }
+
+    var KEYS = [{
+        code: "KeyK",
+        mod: true,
+        action: "search"
+    }, {
+        code: "BracketLeft",
+        run: function() {
+            follow("data-pager-prev");
+        }
+    }, {
+        code: "BracketRight",
+        run: function() {
+            follow("data-pager-next");
+        }
+    }, {
+        code: "Comma",
+        action: "section-prev"
+    }, {
+        code: "Period",
+        action: "section-next"
+    }];
+
+    function fire(action) {
+        document.dispatchEvent(new CustomEvent("epresso:shortcut", {
+            detail: action
+        }));
+    }
+
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") {
+            if (isOpen()) close();
+            return;
+        }
+        var mod = e.ctrlKey || e.metaKey;
+        /* "?" is Shift+/ on most layouts — e.key already accounts for it. */
+        if (e.key === "?") {
+            if (mod || e.altKey || isTyping(e.target)) return;
+            e.preventDefault();
+            if (isOpen()) close();
+            else open();
+            return;
+        }
+        for (var i = 0; i < KEYS.length; i++) {
+            var k = KEYS[i];
+            if (e.code !== k.code) continue;
+            if (k.mod) {
+                if (!mod || e.altKey) continue;
+            } else if (mod || e.altKey || isTyping(e.target)) {
+                continue;
+            }
+            e.preventDefault();
+            if (k.run) k.run();
+            else fire(k.action);
+            return;
+        }
+    });
+
+    overlay.addEventListener("click", function(e) {
+        if (e.target === overlay) close();
+    });
+
+    var closeBtn = document.getElementById("shortcuts-close");
+    if (closeBtn) closeBtn.addEventListener("click", close);
+
+    document.addEventListener("epresso:panel-open", function(e) {
+        if (e.detail !== "shortcuts") close();
+    });
+})();
+</script>
+
+<style>
+.shortcuts-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
+    background: rgba(10, 12, 18, 0.55);
+    backdrop-filter: blur(2px);
+}
+
+.shortcuts-overlay.open {
+    display: flex;
+}
+
+.shortcuts-overlay:focus {
+    outline: none;
+}
+
+.shortcuts-box {
+    width: min(30rem, 92vw);
+    max-height: calc(100vh - 24vh);
+    max-height: calc(100dvh - 24dvh);
+    /* leave room for the 12vh top/bottom gutters */
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+}
+
+.shortcuts-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-md);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+}
+
+.shortcuts-head h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.shortcuts-close {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--control-h);
+    height: var(--control-h);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+.shortcuts-close svg {
+    width: 15px;
+    height: 15px;
+}
+
+.shortcuts-close:hover {
+    color: var(--ink);
+    background: var(--accent-soft);
+}
+
+.shortcuts-list {
+    margin: 0;
+    padding: var(--space-md) var(--space-lg);
+    display: grid;
+    gap: var(--space-sm);
+}
+
+.shortcuts-list>div {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.shortcuts-list dt {
+    flex: 0 0 6.5rem;
+    display: flex;
+    gap: 0.25rem;
+}
+
+.shortcuts-list dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.shortcuts-list kbd {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink);
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    min-width: 1.5rem;
+    text-align: center;
+}
+</style>

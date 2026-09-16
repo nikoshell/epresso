@@ -1,9 +1,10 @@
 """Epresso Pygments styles — light + dark code palettes.
 
 Reusable syntax-highlighting styles for any epresso site. Used via
-``pygments_css(EpressoThemeDark, selector)``; a common pattern is to scope the
-light style under ``html[data-theme="light"]`` and the dark style under
-``html[data-theme="dark"]``.
+``pygments_css_pair(EpressoThemeLight, EpressoThemeDark)``, which emits every
+colour as ``light-dark()`` so one stylesheet follows ``color-scheme`` the way an
+epresso theme's design tokens do. ``pygments_css(theme, selector)`` is still
+there for a single-palette site.
 
 Palette (token → role):
   green   = keyword / operator / control / interpol

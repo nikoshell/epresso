@@ -22,16 +22,13 @@ def _make(posts):
         "    draft: bool = False\n"
         "posts = define_collection('posts', glob='*.md', base='./content/posts', schema=Post)\n"
     )
-    (root / "pages" / "posts" / "[slug].html").write_text(
-        "{% extends 'layouts/base.html' %}{% block content %}{{ props.title }}{% endblock %}"
-    )
-    (root / "pages" / "posts" / "[slug].py").write_text(
-        "from epresso.routing import Route\n"
+    (root / "pages" / "posts" / "[slug].ep").write_text(
+        "---\n"
         "def get_static_paths():\n"
-        "    return [Route(path=f'/posts/{p.id}/', params={'slug': p.id}, data=p) for p in site.get_collection('posts')]\n"
+        "    return [dict(params={'slug': p.id}, data=p) for p in site.get_collection('posts')]\n"
+        "---\n"
+        "<p>{{ props.title }}</p>\n"
     )
-    (root / "templates" / "layouts").mkdir(parents=True)
-    (root / "templates" / "layouts" / "base.html").write_text("<html><body>{% block content %}{% endblock %}</body></html>")
     for name, fm in posts.items():
         (root / "content" / "posts" / f"{name}.md").write_text(f"---\n{fm}\n---\nbody\n")
     return root, Site.load(root)

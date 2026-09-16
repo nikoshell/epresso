@@ -52,6 +52,15 @@ available, epresso runs it on the declared CSS entry points:
 If the binary is unavailable, epresso falls back to a verbatim copy, so CSS stays
 optional.
 
+## Styling a layer
+
+Components from a [layer](../guides/extending/layers.md) carry their scoped `<style>`
+and `<script>` exactly like site components, so a library's per-component styles
+work with no extra setup. Global CSS from a layer must travel in a
+`<style is:global>` block inside one of its components — v1 layers contribute
+`components/` and `layouts/` only, so `asset()` cannot reach a layer's
+`styles/` or `assets/`.
+
 ## Fonts
 
 There is no dedicated font pipeline — include `@font-face` rules in your CSS or

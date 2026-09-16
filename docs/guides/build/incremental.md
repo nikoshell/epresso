@@ -10,6 +10,9 @@ epresso builds are **deterministic** (same source + config → same output) and
   and entries it consumed (via `get_collection` / `get_entry`).
 - On the next build, routes whose dependencies haven't changed are **reused**
   from the cache instead of re-rendered.
+- The cache is dropped wholesale when the *config* or any *template/component*
+  changes — including a file in a [layer](../guides/extending/layers.md) — so
+  editing a component re-renders every route.
 
 ## Cache
 

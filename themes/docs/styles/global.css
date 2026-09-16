@@ -3,8 +3,9 @@
    live scoped in their own .ep file; the doc layout grid lives in layouts/Doc.ep. */
 /* ── Tokens · light-dark ────────────────── */
 :root {
-  color-scheme: dark;
+  color-scheme: light dark;
 
+  --bw: light-dark(#000, #fff);
   --bg: light-dark(#fafbfc, #0f1117);
   --surface: light-dark(#ffffff, #171a21);
   --ink: light-dark(#1a1d23, #e8ecf1);
@@ -19,15 +20,17 @@
   --warning: light-dark(#a16a00, #e0b45a);
   --error: light-dark(#c23b3b, #e06a6a);
 
+  --brand-logo: light-dark(#1b1b1b, #f6f4f1); /* epresso wordmark fill (dark on light, light on dark) */
+
   --transition-theme: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 
   --font-display: "Space Grotesk", "Segoe UI", sans-serif;
   --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 
-  --text-h1: 500 44px/1.1 var(--font-display);
-  --text-h2: 600 30px/1.2 var(--font-display);
-  --text-h3: 600 20px/1.3 var(--font-body);
+  --text-h1: 500 clamp(2.125rem, 1.5rem + 2.6vw, 2.75rem)/1.1 var(--font-display);
+  --text-h2: 600 clamp(1.5rem, 1.25rem + 1vw, 1.875rem)/1.2 var(--font-display);
+  --text-h3: 600 clamp(1.125rem, 1rem + 0.5vw, 1.25rem)/1.3 var(--font-body);
   --text-body: 400 16px/1.6 var(--font-body);
   --text-small: 400 13px/1.5 var(--font-body);
   --text-caption: 500 11px/1.5 var(--font-body);
@@ -35,18 +38,54 @@
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px;
   --space-xl: 32px; --space-2xl: 48px; --space-3xl: 64px;
   --radius: 8px; --radius-sm: 6px;
+  --control-h: 2.2rem; /* square icon-button size (header actions, drawer toggle) */
   --shadow-sm: light-dark(0 1px 2px rgba(16, 20, 28, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4));
   --shadow-md: light-dark(0 4px 16px rgba(16, 20, 28, 0.1), 0 4px 16px rgba(0, 0, 0, 0.5));
   --shadow-lg: light-dark(0 16px 40px rgba(16, 20, 28, 0.16), 0 16px 40px rgba(0, 0, 0, 0.6));
   --dur-fast: 150ms; --dur-normal: 250ms; --ease: cubic-bezier(0.2, 0, 0, 1);
 
+  /* z-index scale — every stacking layer goes through one of these, so the
+     order is readable in one place. Keep raw numbers out of components. */
+  --z-behind: -1;    /* decorative fill behind a component's own content */
+  --z-content: 1;    /* lifted above --z-behind inside one component      */
+  --z-scrim: 15;     /* dimming layer under a drawer, below the header    */
+  --z-popover: 20;   /* dropdown menus and the inline ToC bar             */
+  --z-header: 40;    /* sticky site header                                */
+  --z-drawer: 60;    /* off-canvas nav panels                              */
+  --z-overlay: 100;  /* search / shortcuts dialogs, skip link              */
+  --z-lightbox: 200; /* image lightbox                                     */
+
   --sidebar-w: 16.5rem;
   --content-max: 46rem;
-  --header-h: 3.5rem;
+  --header-h: 3.5rem; /* TOTAL header height, its 1px bottom border included */
+  --toc-w: 15rem;
+  /* Height of the sticky ToC bar (add 1px for its bottom border). */
+  --toc-bar-h: 2.5rem;
 }
 
-/* The theme toggle sets data-theme on <html>; flip color-scheme so the
-   light-dark() tokens above resolve to the right palette. */
+/* ── Responsive layers ────────────────────────────────────────────────
+     grid        page structure        layouts/Doc.ep, Header shell, Footer
+     flex        component internals   header actions, ToC bar, pager, sidebar
+     @container  (size) reusable components adapt to the space they get
+                        (.content, .site-header)
+     attributes  page state published by Base.ep on <html> as data-nav-mode /
+                 data-toc-mode; components branch on it with plain attribute
+                 selectors (no @container style() — that can't be detected and
+                 would silently drop layout rules)
+     @media      feature queries only (prefers-reduced-motion, print)
+   Breakpoints 768 / 1024 / 1280 live in Base.ep (the state script); the
+   components mirror them in @container queries — keep those in sync.
+   ────────────────────────────────────────────────────────────────── */
+
+/* Responsive breakpoints — media queries cannot read custom properties, so
+   keep these in sync with the components that use them:
+     768px  phone    (header nav collapses to a hamburger)
+     1024px tablet   (sidebar → off-canvas drawer, search icon-only)
+     1280px desktop  (right-rail ToC replaces the sticky popover bar) */
+
+/* Everything above resolves through color-scheme, which follows the OS by
+   default (:root, above). The dev toolbar can pin it instead by setting
+   data-theme on <html> — the only reason these rules exist. */
 html[data-theme="light"] {
   color-scheme: light;
 }
@@ -95,17 +134,46 @@ html[data-theme="dark"] {
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 0;
+  /* Clear the sticky header (and the ToC bar below 1280) on anchor jumps. */
+  scroll-padding-top: calc(var(--header-h) + var(--space-md));
   background: var(--bg);
 }
 
 body {
+  /* Floor the layout: the mobile design must not squeeze below 360px. */
+  min-width: 360px;
+  /* The closed off-canvas drawers sit just outside the viewport (translateX),
+     which would otherwise make the page horizontally scrollable. */
+  overflow-x: clip;
   margin: 0;
   font: var(--text-body);
   color: var(--ink);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   transition: var(--transition-theme);
+  /* Sticky footer: keep .site-footer at the bottom on short pages. */
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The drawers are parked off-canvas with `transform`. If the stylesheet lands
+   after the first paint (slow mobile loads) that first application would
+   animate them into place, so transitions only start once the page has
+   settled — Base.ep adds `epresso-ready` on load. Same for crossing a
+   breakpoint, where a drawer flips between in-flow and off-canvas
+   (`epresso-resizing`, toggled on resize). */
+html:not(.epresso-ready) .nav-links,
+html:not(.epresso-ready) .sidebar,
+html.epresso-resizing .nav-links,
+html.epresso-resizing .sidebar {
+  transition: none !important;
+}
+
+/* Off-canvas sidebar open: lock page scroll. */
+body.nav-open {
+  overflow: hidden;
 }
 
 h1,
@@ -132,6 +200,7 @@ h3 {
 
 p {
   margin: 0 0 var(--space-md);
+  text-wrap: pretty; /* keep a single orphaned word off the last line */
 }
 
 a {
@@ -156,12 +225,30 @@ pre {
   border-radius: 4px;
 }
 
+::selection {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+/* Pressed feedback: a 1px settle so a click feels physical. Deliberately not
+   in any transition list — the press should land instantly. */
+button:not(:disabled):active,
+.icon-btn:active,
+.pager-link:active,
+.code-btn:active,
+.code-copy:active,
+.search-result:active {
+  transform: translateY(1px);
+}
+
 /* ── Accessibility helpers ───────────────── */
 .skip-link {
-  position: absolute;
+  /* fixed (not absolute): a focused skip link must be visible even when the
+     page is scrolled. */
+  position: fixed;
   left: var(--space-md);
   top: -100%;
-  z-index: 100;
+  z-index: var(--z-overlay);
   background: var(--accent-bg);
   color: var(--accent-ink);
   padding: var(--space-sm) var(--space-md);
@@ -188,5 +275,26 @@ pre {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ── Print ───────────────────────────────── */
+@media print {
+  .site-header,
+  .sidebar,
+  .sidebar-scrim,
+  .toc,
+  .site-footer,
+  .skip-link {
+    display: none !important;
+  }
+
+  .site-body {
+    display: block !important;
+  }
+
+  .content {
+    max-width: none !important;
+    padding: 0 !important;
   }
 }

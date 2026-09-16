@@ -1,19 +1,20 @@
 ---
 from markupsafe import Markup, escape
 
-ICONS = {
-    "caret": '<path fill="currentColor" d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>',
-}
+# Same path as Icon.ep's "caret" (shared by PageActions.ep). Duplicated here
+# because this markup is built as a Python string, not template composition,
+# so a <Icon/> tag in it would never be expanded.
+_CARET = '<path fill="currentColor" d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>'
 
 
-def icon(name: str, class_name: str = "", size: int = 14) -> str:
-    """Wrap an icon path in an ``<svg>`` (viewBox 16×16, currentColor).
+def icon(class_name: str = "", size: int = 14) -> str:
+    """Wrap the caret path in an ``<svg>`` (viewBox 16×16, currentColor).
 
     ``size`` sets the rendered width/height so the icon isn't the SVG default.
     """
     cls = f' class="{class_name}"' if class_name else ""
     dims = f' width="{size}" height="{size}"'
-    return f'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"{dims}{cls}>{ICONS[name]}</svg>'
+    return f'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"{dims}{cls}>{_CARET}</svg>'
 
 
 def _build_tree(docs):
@@ -44,9 +45,7 @@ def render_sidebar(docs, current: str) -> Markup:
     by_id = {d.id: d for d in docs}
     root = _build_tree(docs)
     active_entry = by_id.get(current)
-    active_path = (
-        list(active_entry.computed.get("group_path", [])) if active_entry else []
-    )
+    active_path = list(active_entry.computed.get("group_path", [])) if active_entry else []
 
     dir_min: dict[tuple, int] = {}
     for d in docs:
@@ -57,188 +56,491 @@ def render_sidebar(docs, current: str) -> Markup:
             if o < dir_min.get(key, 10**9):
                 dir_min[key] = o
 
-    def inner_for(node):
+    def inner_for(node, name=""):
         hub = node["hub"]
-        label = hub.data.title if hub else ""
         if hub:
-            active = ' class="active" aria-current="page"' if current == hub.id else ""
-            return f'<a href="/{escape(hub.id)}/"{active}>{escape(label)}</a>'
+            label = hub.data.title
+            # A hub without a body is a category label only (no page to link to).
+            if not (hub.computed or {}).get("has_page", True):
+                return f"<span>{escape(label)}</span>"
+            current_attr = ' aria-current="page"' if current == hub.id else ""
+            return f'<a href="/{escape(hub.id)}/"{current_attr}>{escape(label)}</a>'
+        label = name.replace("-", " ").title() if name else ""
         return f"<span>{escape(label)}</span>"
 
     def render(node, path):
         parts = ['<ul class="tree">']
-        for name in sorted(
-            node["dirs"].keys(),
-            key=lambda n: (dir_min.get(tuple(path) + (n,), 10**9), n),
-        ):
-            child = node["dirs"][name]
-            child_path = path + [name]
-            hub = child["hub"]
-            depth = len(child_path)
+        # Interleave subdirectories and pages by order (dirs use their first
+        # doc's order) instead of rendering all directories first.
+        entries = []
+        for name, child in node["dirs"].items():
+            entries.append((dir_min.get(tuple(path) + (name,), 10**9), 0, name, ("dir", name, child)))
+        for d in node["docs"]:
+            entries.append((int(d.computed.get("order", 0)), 1, d.data.title.lower(), ("doc", d)))
+        for _o, _k, _tie, payload in sorted(entries, key=lambda e: e[:3]):
+            if payload[0] == "dir":
+                name, child = payload[1], payload[2]
+                child_path = path + [name]
+                hub = child["hub"]
+                depth = len(child_path)
+                hub_active = bool(hub) and (hub.computed or {}).get("has_page", True) and hub.id == current
+                _lv = depth - 1
+                indent_attr = f' style="--indent:calc({_lv} * 1.3rem + {_lv} * 1px)"' if _lv else ""
 
-            # A lone hub index = a plain leaf link (no container).
-            if hub and not (child["dirs"] or child["docs"]):
-                active = ' class="active" aria-current="page"' if hub.id == current else ""
-                parts.append(
-                    f'<li class="tree-leaf"><a href="/{escape(hub.id)}/"{active}>{escape(hub.data.title)}</a></li>'
-                )
-                continue
+                # A lone hub index = a plain leaf (no container). Without a page
+                # it is only a label.
+                if hub and not (child["dirs"] or child["docs"]):
+                    if (hub.computed or {}).get("has_page", True):
+                        active = ' class="active" aria-current="page"' if hub.id == current else ""
+                        parts.append(
+                            f'<li class="tree-leaf"{indent_attr}><a href="/{escape(hub.id)}/"{active}>{escape(hub.data.title)}</a></li>'
+                        )
+                    else:
+                        parts.append(f'<li class="tree-leaf"{indent_attr}><span>{escape(hub.data.title)}</span></li>')
+                    continue
 
-            children_html = render(child, child_path)
-            inner = inner_for(child)
+                children_html = render(child, child_path)
+                inner = inner_for(child, name)
 
-            if depth == 1:
-                # FIRST level: always expanded, never collapsible, no caret/icons.
-                parts.append(
-                    f'<li class="tree-dir tree-top"><div class="tree-head">{inner}</div>{children_html}</li>'
-                )
+                if depth == 1:
+                    # FIRST level: always expanded, never collapsible, no caret/icons.
+                    head_cls = "tree-head active" if hub_active else "tree-head"
+                    parts.append(
+                        f'<li class="tree-dir tree-top"><div class="{head_cls}">{inner}</div>{children_html}</li>'
+                    )
+                else:
+                    on_path = bool(active_path) and active_path[: len(child_path)] == child_path
+                    opened = (len(active_path) > len(child_path) and on_path) or (
+                        active_path == child_path and active_path and (hub is None or current != hub.id)
+                    )
+                    summary_attr = ' class="active"' if hub_active else ""
+                    # Caret on the right (except the always-open top level, which
+                    # has no caret at all).
+                    parts.append(
+                        f'<li class="tree-dir"{indent_attr}><details{" open" if opened else ""}>'
+                        f"<summary{summary_attr}>{inner}{icon('tree-caret', 14)}</summary>"
+                        f"{children_html}</details></li>"
+                    )
             else:
-                on_path = bool(active_path) and active_path[: len(child_path)] == child_path
-                opened = (len(active_path) > len(child_path) and on_path) or (
-                    active_path == child_path and active_path and (hub is None or current != hub.id)
-                )
+                d = payload[1]
+                doc_depth = len(path) + 1
+                _dlv = doc_depth - 1
+                doc_indent = f' style="--indent:calc({_dlv} * 1.3rem + {_dlv} * 1px)"' if _dlv else ""
+                active = ' class="active" aria-current="page"' if d.id == current else ""
                 parts.append(
-                    f'<li class="tree-dir"><details{" open" if opened else ""}>'
-                    f"<summary>{icon('caret', 'tree-caret', 14)}{inner}</summary>"
-                    f"{children_html}</details></li>"
+                    f'<li class="tree-leaf"{doc_indent}><a href="/{escape(d.id)}/"{active}>{escape(d.data.title)}</a></li>'
                 )
-
-        for d in sorted(
-            node["docs"], key=lambda x: (x.computed.get("order", 0), x.data.title.lower())
-        ):
-            active = ' class="active" aria-current="page"' if d.id == current else ""
-            parts.append(
-                f'<li class="tree-leaf"><a href="/{escape(d.id)}/"{active}>{escape(d.data.title)}</a></li>'
-            )
         parts.append("</ul>")
         return "".join(parts)
 
     return Markup(render(root, []))
 ---
 
-<aside class="sidebar" aria-label="Documentation navigation">
-    <nav>
-        {{ render_sidebar(props.docs, props.current) }}
-    </nav>
-</aside>
+<Fragment>
+    <div class="sidebar-scrim" aria-hidden="true"></div>
+    <aside class="sidebar" id="sidebar-nav" aria-label="Documentation navigation">
+        <div class="sidebar-inner">
+            <nav>
+                {{ render_sidebar(props.docs, props.current) }}
+            </nav>
+        </div>
+    </aside>
+</Fragment>
+
+<script>
+(function() {
+    "use strict";
+    if (window.__epressoSidebarToggle) return;
+    window.__epressoSidebarToggle = true;
+    var sidebar = document.getElementById("sidebar-nav");
+    var scrim = document.querySelector(".sidebar-scrim");
+    if (!sidebar) return;
+
+    var mq = window.matchMedia("(max-width: 1024px)");
+    var FOCUSABLE = 'a[href], button:not([disabled]), summary, input, [tabindex]:not([tabindex="-1"])';
+
+    function setOpen(open) {
+        sidebar.classList.toggle("is-open", open);
+        if (scrim) scrim.classList.toggle("is-open", open);
+        document.body.classList.toggle("nav-open", open);
+        /* Keep closed off-canvas content out of the tab order. */
+        sidebar.inert = mq.matches && !open;
+        var triggers = document.querySelectorAll(".sidebar-toggle");
+        Array.prototype.forEach.call(triggers, function(b) {
+            b.setAttribute("aria-expanded", open ? "true" : "false");
+            b.setAttribute("aria-label", open ? "Hide navigation" : "Show navigation");
+        });
+        if (open) {
+            var first = sidebar.querySelector(FOCUSABLE);
+            if (first) first.focus();
+        } else if (triggers.length && sidebar.contains(document.activeElement)) {
+            triggers[0].focus();
+        }
+        if (open && window.epressoPanelOpened) window.epressoPanelOpened("sidebar");
+    }
+    document.addEventListener("epresso:panel-open", function(e) {
+        if (e.detail !== "sidebar") setOpen(false);
+    });
+
+    function syncState() {
+        if (!mq.matches && sidebar.classList.contains("is-open")) setOpen(false);
+        sidebar.inert = mq.matches && !sidebar.classList.contains("is-open");
+    }
+    syncState();
+    if (mq.addEventListener) mq.addEventListener("change", syncState);
+    /* Delegated: the toggle lives in the ToC bar, which is rendered after
+       this script. */
+    document.addEventListener("click", function(e) {
+        var btn = e.target.closest ? e.target.closest(".sidebar-toggle") : null;
+        if (btn) setOpen(!sidebar.classList.contains("is-open"));
+    });
+    if (scrim) scrim.addEventListener("click", function() {
+        setOpen(false);
+    });
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") {
+            setOpen(false);
+            return;
+        }
+        /* Trap focus inside the open drawer. */
+        if (e.key !== "Tab" || !sidebar.classList.contains("is-open")) return;
+        var f = sidebar.querySelectorAll(FOCUSABLE);
+        if (!f.length) return;
+        var first = f[0],
+            last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+    sidebar.addEventListener("click", function(e) {
+        var a = e.target.closest ? e.target.closest("a") : null;
+        if (a && mq.matches) setOpen(false);
+    });
+})();
+
+/* Scroll fades (see `.sidebar nav` mask-image): publish how much of the
+   tree is scrolled out of view at each edge, so the gradient stops can
+   track it. Recomputed on scroll, resize, and section open/close. */
+(function() {
+    "use strict";
+    if (window.__epressoSidebarFade) return;
+    window.__epressoSidebarFade = true;
+    var fadeNav = document.querySelector(".sidebar nav");
+    if (fadeNav) {
+        var publishFades = function() {
+            var max = Math.max(0, fadeNav.scrollHeight - fadeNav.clientHeight);
+            var top = Math.min(Math.max(fadeNav.scrollTop, 0), max);
+            fadeNav.style.setProperty("--scroll-area-overflow-y-start", top + "px");
+            fadeNav.style.setProperty("--scroll-area-overflow-y-end", (max - top) + "px");
+        };
+        fadeNav.addEventListener("scroll", publishFades, {
+            passive: true
+        });
+        window.addEventListener("resize", publishFades);
+        document.addEventListener("toggle", publishFades, true); /* <details> open/close */
+        publishFades();
+    }
+})();
+</script>
 
 <style>
-    .sidebar {
-        grid-area: sidebar;
-        padding: var(--space-xl) var(--space-sm);
-        position: sticky;
-        top: var(--header-h);
-        align-self: start;
-        max-height: calc(100vh - var(--header-h));
-        overflow-y: auto;
-    }
+.sidebar-scrim {
+    display: none;
+}
 
-    .tree {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
+.sidebar {
+    grid-area: sidebar;
+    padding: var(--space-sm);
+    border-right: 1px solid var(--line);
+    /* As tall as the content column, so the divider runs the whole page;
+           .sidebar-inner is what sticks. */
+    align-self: stretch;
+}
 
-    .tree ul {
-        list-style: none;
-        margin: 0;
-        padding: 0 0 0 0.9rem;
-        border-left: 1px solid var(--line);
-        margin-left: 0.4rem;
-    }
+.sidebar-inner {
+    position: sticky;
+    top: var(--header-h);
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    overflow: hidden;
+}
 
-    .tree li {
-        position: relative;
-    }
+.sidebar nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* Always hidden — scrolling still works, there's just no scrollbar to
+           collide with the rows' right-aligned carets. */
+    scrollbar-width: none;
+}
 
-    /* collapsible (depth >= 2) sections */
-    .tree details {
-        margin: 0;
-    }
+.sidebar nav::-webkit-scrollbar {
+    width: 0;
+}
 
-    .tree summary {
-        list-style: none;
-        display: flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.28rem 0.4rem;
-        border-radius: var(--radius-sm);
-        color: var(--ink);
-        font-weight: 500;
-        cursor: pointer;
-        font-size: 0.92rem;
-        line-height: 1.4;
-    }
+.sidebar nav {
+    position: relative;
+}
 
-    .tree summary::-webkit-details-marker {
-        display: none;
-    }
+/* Scroll fades: the top/bottom stops are min(fade-size, overflow), where
+       the overflow amounts are set by the script below from nav.scrollTop — so
+       an edge only fades once content is actually scrolled out of view. Same
+       convention as Base UI / shadcn scroll areas. */
+.sidebar nav {
+    --scroll-area-fade-size: 1.5rem;
+    /* A hover row is a fixed *step* away from the page background: lighter
+           on dark (#1a1d23 vs #0f1117 = 1.118:1), darker on light (#eeeeee vs
+           #fafbfc = 1.120:1) — the same lift in both. The row text follows the
+           theme (--ink), since white would vanish on the light fill. */
+    --tree-row-hover: light-dark(#eeeeee, #1a1d23);
+    mask-image: linear-gradient(to bottom,
+            transparent 0,
+            #000 min(var(--scroll-area-fade-size), var(--scroll-area-overflow-y-start, 0px)),
+            #000 calc(100% - min(var(--scroll-area-fade-size), var(--scroll-area-overflow-y-end, 0px))),
+            transparent 100%);
+}
 
-    .tree summary:hover {
-        background: var(--surface);
-    }
+.tree {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    z-index: var(--z-content);
+}
 
+.tree ul {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 0.9rem;
+    border-left: 1px solid var(--line);
+    margin-left: 0.4rem;
+}
+
+/* Top-level groups are section headers, not real nesting — their direct
+       children skip the connecting guide line that deeper subtrees keep. */
+.tree-top>.tree {
+    border-left: none;
+}
+
+.tree li {
+    position: relative;
+}
+
+/* collapsible (depth >= 2) sections */
+.tree details {
+    margin: 0;
+}
+
+.tree summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.92rem;
+    line-height: 1.4;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.tree summary::-webkit-details-marker {
+    display: none;
+}
+
+.tree summary:hover:not(.active) {
+    background: var(--tree-row-hover);
+    color: var(--ink);
+}
+
+.tree summary:hover:not(.active)>a {
+    color: var(--ink);
+}
+
+.tree-caret {
+    margin-left: auto;
+    transition: transform 0.12s ease, color var(--dur-fast) var(--ease);
+    color: var(--muted);
+    flex: none;
+}
+
+.tree summary:hover:not(.active) .tree-caret {
+    color: var(--ink);
+}
+
+.tree details[open]>summary .tree-caret {
+    transform: rotate(90deg);
+}
+
+/* FIRST level: always expanded, not a <details>, no caret/icon */
+.tree-top>.tree-head {
+    display: block;
+    padding: 0;
+    margin: 0.15rem 0;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.4;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.tree-top>.tree-head:has(> a):hover:not(.active) {
+    background: var(--tree-row-hover);
+    color: var(--ink);
+}
+
+.tree-top>.tree-head:hover:not(.active)>a {
+    color: var(--ink);
+}
+
+.tree summary a,
+.tree-head a {
+    color: var(--muted);
+    transition: color var(--dur-fast) var(--ease);
+}
+
+/* Label-only rows (no page link) get the same box height as link rows. */
+.tree summary>span,
+.tree .tree-head>span,
+.tree li.tree-leaf>span {
+    display: flex;
+    align-items: center;
+    padding: 0.28rem 0.4rem;
+}
+
+.tree a {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.28rem 0.4rem;
+    border-radius: var(--radius-sm);
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.4;
+    text-decoration: none;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.tree a:hover:not(.active) {
+    background: var(--tree-row-hover);
+    color: var(--ink);
+}
+
+/* Active page: full-width highlight with the same geometry as the
+       sliding hover bar (extends across the item's indentation). */
+.tree .active {
+    position: relative;
+}
+
+.tree .active::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    left: calc(-1 * var(--indent, 0rem));
+    right: 0;
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+    z-index: var(--z-behind);
+}
+
+.tree .active a,
+.tree a.active {
+    color: var(--accent);
+}
+
+.tree .tree-head.active>a,
+.tree summary.active>a {
+    background: transparent;
+}
+
+:global(html[data-nav-mode="compact"]) .tree ul {
+    border-left: none;
+    padding-left: 0;
+    margin-left: 0;
+}
+
+:global(html[data-nav-mode="compact"]) .tree .active::before {
+    left: 0;
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar-scrim {
+    display: block;
+    position: fixed;
+    /* the header stays above/undimmed; the scrim covers the content area */
+    top: var(--header-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-scrim);
+    background: rgb(0 0 0 / 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-fast) var(--ease);
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar-scrim.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar {
+    position: fixed;
+    /* Stop at the header: it (and its toggle) stays visible, so the drawer
+           needs no close button of its own. */
+    top: var(--header-h);
+    right: 0;
+    bottom: auto;
+    height: calc(100vh - var(--header-h));
+    height: calc(100dvh - var(--header-h));
+    width: min(20rem, 85vw);
+    max-height: none;
+    padding: var(--space-sm);
+    padding-right: calc(var(--space-sm) + env(safe-area-inset-right));
+    padding-bottom: calc(var(--space-sm) + env(safe-area-inset-bottom));
+    border-top: none;
+    border-right: none;
+    border-left: 1px solid var(--line);
+    background: var(--bg);
+    z-index: var(--z-drawer);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateX(100%);
+    transition: transform var(--dur-normal) var(--ease);
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar.is-open {
+    transform: translateX(0);
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+:global(html[data-nav-mode="compact"]) .sidebar-inner {
+    /* The drawer itself is the flex column. */
+    position: static;
+    height: auto;
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .tree a,
+    .tree summary,
+    .tree-top>.tree-head,
     .tree-caret {
-        transition: transform 0.12s ease;
-        color: var(--muted);
-        flex: none;
+        transition: none;
     }
-
-    .tree details[open] > summary .tree-caret {
-        transform: rotate(90deg);
-    }
-
-    /* FIRST level: always expanded, not a <details>, no caret/icon */
-    .tree-top > .tree-head {
-        display: block;
-        padding: 0.28rem 0.4rem;
-        margin: 0.15rem 0;
-        border-radius: var(--radius-sm);
-        color: var(--ink);
-        font-weight: 600;
-        font-size: 0.92rem;
-        line-height: 1.4;
-    }
-
-    .tree summary a,
-    .tree-head a {
-        color: var(--ink);
-    }
-
-    .tree a {
-        display: flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.28rem 0.4rem;
-        border-radius: var(--radius-sm);
-        color: var(--muted);
-        font-size: 0.92rem;
-        line-height: 1.4;
-        text-decoration: none;
-    }
-
-    .tree a:hover {
-        color: var(--ink);
-        background: var(--surface);
-    }
-
-    .tree a.active {
-        color: var(--accent);
-        background: var(--accent-soft);
-    }
-
-    @media (max-width: 860px) {
-        .tree ul {
-            border-left: none;
-            padding-left: 0;
-            margin-left: 0;
-        }
-
-        .sidebar {
-            position: static;
-            max-height: none;
-            border-bottom: 1px solid var(--line);
-            padding: var(--space-md);
-        }
-    }
+}
 </style>

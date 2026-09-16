@@ -36,8 +36,8 @@ def test_component_without_scoped_style_is_unscoped():
     # A component with no scoped CSS (markup only) renders without data-epresso-*.
     html = _render(
         {
-            "templates/components/Plain.ep": "<p>hi</p>",
-            "pages/index.html": "<Plain />",
+            "components/Plain.ep": "<p>hi</p>",
+            "pages/index.ep": "---\n---\n<Plain />",
         }
     )
     assert "data-epresso-" not in html
@@ -47,8 +47,8 @@ def test_component_with_global_style_is_unscoped():
     # <style is:global> does not opt the component into scoping.
     html = _render(
         {
-            "templates/components/Plain.ep": "<p>hi</p>\n<style is:global>.x{color:red}</style>",
-            "pages/index.html": "<Plain />",
+            "components/Plain.ep": "<p>hi</p>\n<style is:global>.x{color:red}</style>",
+            "pages/index.ep": "---\n---\n<Plain />",
         }
     )
     assert "data-epresso-" not in html
@@ -60,7 +60,7 @@ def test_full_document_global_style_lands_in_head():
     # dumped before the doctype (which would be invalid HTML).
     html = _render(
         {
-            "templates/layouts/Base.ep": (
+            "layouts/Base.ep": (
                 "<!doctype html><html lang='en'><head><meta charset='utf-8'>"
                 "<title>{{ props.title or 'site' }}</title></head>"
                 "<body><slot /></body></html>"
@@ -78,8 +78,8 @@ def test_full_document_global_style_lands_in_head():
 def test_component_with_scoped_style_marks_its_elements():
     html = _render(
         {
-            "templates/components/Scoped.ep": "<div class='x'>hi</div>\n<style>.x{color:red}</style>",
-            "pages/index.html": "<Scoped />",
+            "components/Scoped.ep": "<div class='x'>hi</div>\n<style>.x{color:red}</style>",
+            "pages/index.ep": "---\n---\n<Scoped />",
         }
     )
     assert "data-epresso-" in html
@@ -93,9 +93,9 @@ def test_nested_scoped_component_keeps_own_scope_only():
     # element has a single data-epresso-* and parent CSS can't leak into it.
     html = _render(
         {
-            "templates/components/Child.ep": "<button class='c'>{{ content }}</button>\n<style>.c{color:red}</style>",
-            "templates/components/Parent.ep": "<div class='p'><Child>hi</Child></div>\n<style>.p{color:blue}</style>",
-            "pages/index.html": "<Parent />",
+            "components/Child.ep": "<button class='c'>{{ content }}</button>\n<style>.c{color:red}</style>",
+            "components/Parent.ep": "<div class='p'><Child>hi</Child></div>\n<style>.p{color:blue}</style>",
+            "pages/index.ep": "---\n---\n<Parent />",
         }
     )
     m = __import__("re").search(r"<button[^>]*>", html)
@@ -111,9 +111,9 @@ def test_nested_scoped_component_keeps_own_scope_only():
 def test_sibling_scoped_components_get_distinct_scopes():
     html = _render(
         {
-            "templates/components/A.ep": "<span class='a'>A</span>\n<style>.a{color:red}</style>",
-            "templates/components/B.ep": "<span class='b'>B</span>\n<style>.b{color:blue}</style>",
-            "pages/index.html": "<A /><B />",
+            "components/A.ep": "<span class='a'>A</span>\n<style>.a{color:red}</style>",
+            "components/B.ep": "<span class='b'>B</span>\n<style>.b{color:blue}</style>",
+            "pages/index.ep": "---\n---\n<Fragment><A /><B /></Fragment>",
         }
     )
     a = __import__("re").search(r"<span class='a'[^>]*>", html).group(0)

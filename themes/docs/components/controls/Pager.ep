@@ -9,68 +9,72 @@ class Props(BaseModel):
 
 <nav class="pager" aria-label="Docs pagination">
     {% if props.prev %}
-        <a class="pager-link" href="{{ props.prev.url }}">
+        <a class="pager-link" data-pager-prev href="{{ props.prev.url }}">
             <span class="pager-label">Previous</span><span class="pager-title">{{ props.prev.title }}</span>
         </a>
-    {% else %}<span class="pager-empty"></span>{% endif %}
+    {% else %}
+        <span class="pager-empty"></span>
+    {% endif %}
     {% if props.next %}
-        <a class="pager-link pager-next" href="{{ props.next.url }}">
+        <a class="pager-link pager-next" data-pager-next href="{{ props.next.url }}">
             <span class="pager-label">Next</span><span class="pager-title">{{ props.next.title }}</span>
         </a>
     {% endif %}
 </nav>
 
 <style>
+.pager {
+    display: flex;
+    gap: var(--space-md);
+    margin-top: calc(2*var(--space-3xl));
+    margin-bottom: 50vh;
+    padding-top: var(--space-xl);
+    border-top: 1px solid var(--line);
+}
+
+.pager-link {
+    flex: 1 1 50%;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--space-md) var(--space-lg);
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--dur-fast) var(--ease);
+}
+
+.pager-link:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+.pager-next {
+    text-align: right;
+}
+
+.pager-label {
+    display: block;
+    font: var(--text-caption);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: var(--space-xs);
+}
+
+.pager-title {
+    font-weight: 600;
+    font-family: var(--font-display);
+}
+
+.pager-empty {
+    flex: 1 1 50%;
+}
+
+/* Adapts to the article column (not the viewport). */
+@container content (max-width: 30rem) {
     .pager {
-        display: flex;
-        gap: var(--space-md);
-        margin-top: var(--space-2xl);
-        padding-top: var(--space-xl);
-        border-top: 1px solid var(--line);
+        flex-direction: column;
     }
-
-    .pager-link {
-        flex: 1 1 50%;
-        min-width: 0;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        padding: var(--space-md) var(--space-lg);
-        color: var(--ink);
-        background: var(--surface);
-        box-shadow: var(--shadow-sm);
-        transition: border-color var(--dur-fast) var(--ease);
-    }
-
-    .pager-link:hover {
-        border-color: var(--accent);
-        text-decoration: none;
-    }
-
-    .pager-next {
-        text-align: right;
-    }
-
-    .pager-label {
-        display: block;
-        font: var(--text-caption);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        margin-bottom: var(--space-xs);
-    }
-
-    .pager-title {
-        font-weight: 600;
-        font-family: var(--font-display);
-    }
-
-    .pager-empty {
-        flex: 1 1 50%;
-    }
-
-    @media (max-width: 860px) {
-        .pager {
-            flex-direction: column;
-        }
-    }
+}
 </style>

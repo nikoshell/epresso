@@ -8,7 +8,6 @@ filesystem paths to routes; the file kind determines how it renders.
 | `pages/about.md` | Direct Markdown page (layout via front matter) |
 | `pages/about.ep` | Single-file route (Python frontmatter + Jinja body) |
 | `pages/blog/[slug].ep` | Dynamic `.ep` route via `get_static_paths()` |
-| `pages/blog/[slug].html` + `[slug].py` | Template route + sidecar (legacy) |
 | `pages/robots.txt.py` | Endpoint exporting `get() -> (content_type, body)` |
 
 ## Clean URLs

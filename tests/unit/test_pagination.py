@@ -41,17 +41,13 @@ def test_paginate_works_in_get_static_paths(tmp_path):
     )
     for i in range(5):
         (root / "content" / "posts" / f"p{i}.md").write_text(f"---\ntitle: P{i}\n---\nbody\n")
-    (root / "templates" / "layouts").mkdir(parents=True)
-    (root / "templates" / "layouts" / "base.html").write_text(
-        "<html><body>{% block content %}{% endblock %}</body></html>"
-    )
-    (root / "pages" / "blog" / "index.html").write_text(
-        "{% extends 'layouts/base.html' %}{% block content %}{% for e in props.entries %}{{ e.id }};{% endfor %}{% endblock %}"
-    )
-    (root / "pages" / "blog" / "index.py").write_text(
+    (root / "pages" / "blog" / "index.ep").write_text(
+        "---\n"
         "from epresso.routing import paginate\n"
         "def get_static_paths():\n"
-        "    return paginate(site.get_collection('posts'), per_page=2, base_path='/blog/', template='blog/index.html')\n"
+        "    return paginate(site.get_collection('posts'), per_page=2, base_path='/blog/')\n"
+        "---\n"
+        "{% for e in props.entries %}<span>{{ e.id }}</span>{% endfor %}\n"
     )
     site = Site.load(root)
     site.build()

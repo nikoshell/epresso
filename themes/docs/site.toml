@@ -2,7 +2,7 @@ plugins = ["epresso_pandoc", "epresso_mkdocs_tabs"]
 
 [site]
 name = "epresso"
-url = "https://nikoshell.github.io/epresso/"
+url = "https://epresso.top/"
 language = "en"
 description = "A modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds, and a no-JavaScript-by-default philosophy."
 repository = "https://github.com/nikoshell/epresso"
@@ -12,9 +12,10 @@ branch = "main"
 trailing_slash = "always"
 compress_html = true
 components = "components"
-layouts = "components/layouts"
-# Default public base is root (serve at /). Deploys on a project GitHub Pages
-# path set EPRESSO_BASE=/epresso/ (see .github/workflows/deploy-docs.yml).
+layouts = "layouts"
+# Public base stays at the root: production is served from the custom domain
+# https://epresso.top/, so root-relative URLs need no prefix. (A project GitHub
+# Pages path would set EPRESSO_BASE — see .github/workflows/deploy-docs.yml.)
 
 [content]
 # Production build: hide draft / _private pages (demo pages are draft/private).
@@ -41,7 +42,18 @@ url_template = ""
 [theme]
 # Which subdir of the source repo holds the docs (e.g. "docs" or "_posts").
 # Override with the EPRESSO_DOCS_DIR env var.
+# Page actions (copy page + markdown menu) are on by default; set this to
+# false to hide the button/menu and drop the per-page .md routes too.
+# page_actions = false
 docs_dir = "docs"
 # The repo this theme documents when run at its own directory (self-build), as a
 # path relative to this theme dir. No parent-walking: it's an explicit declaration.
 repo = "../.."
+
+# Optional footer menu (middle column of the footer grid). Relative hrefs get
+# the build base; absolute (http…) hrefs are used as-is.
+[theme.footer]
+# menu = [
+#   { label = "Documentation", href = "/" },
+#   { label = "GitHub", href = "https://github.com/nikoshell/epresso" },
+# ]

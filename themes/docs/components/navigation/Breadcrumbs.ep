@@ -26,29 +26,29 @@ def render(crumbs: list[dict]) -> Markup:
 </nav>
 
 <style>
-    .breadcrumbs {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: var(--space-xs);
-        font-size: 0.82rem;
-        color: var(--muted);
-        margin-bottom: var(--space-md);
-    }
+.breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: var(--space-md);
+}
 
-    .breadcrumbs a {
-        color: var(--muted);
-    }
+.breadcrumbs a {
+    color: var(--muted);
+}
 
-    .breadcrumbs a:hover {
-        color: var(--accent);
-    }
+.breadcrumbs a:hover {
+    color: var(--accent);
+}
 
-    .breadcrumbs .crumb-cur {
-        color: var(--ink);
-    }
+.breadcrumbs .crumb-cur {
+    color: var(--ink);
+}
 
-    .breadcrumbs .crumb-sep {
-        opacity: 0.55;
-    }
+.breadcrumbs .crumb-sep {
+    opacity: 0.55;
+}
 </style>

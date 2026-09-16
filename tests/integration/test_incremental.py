@@ -35,7 +35,7 @@ def test_edit_content_rerenders_only_affected_path(site, tmp_path):
 
 def test_template_change_invalidates_all(site, tmp_path):
     site.build()
-    tmpl = tmp_path / "templates" / "layouts" / "base.html"
+    tmpl = tmp_path / "layouts" / "Base.ep"
     tmpl.write_text(tmpl.read_text().replace("epresso", "EPRESSO"))
     result = site.build(clean=False)
     assert result.skipped == 0  # code change → full rebuild

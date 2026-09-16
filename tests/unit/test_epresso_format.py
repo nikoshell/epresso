@@ -33,7 +33,7 @@ def _site_files():
         ),
         "content/posts/one.md": "---\ntitle: One\ndate: 2026-01-01\n---\n# One\n",
         "content/posts/two.md": "---\ntitle: Two\ndate: 2026-02-01\n---\n# Two\n",
-        "templates/layouts/Base.ep": (
+        "layouts/Base.ep": (
             "---\n"
             "---\n"
             "<!doctype html><html><head><title>{{ props.title }}</title></head>"
@@ -82,7 +82,7 @@ def test_epresso_route_dynamic_with_get_static_paths(tmp_path):
 
 def test_epresso_component_with_props_validation(tmp_path):
     files = _site_files()
-    files["templates/components/Card.ep"] = (
+    files["components/Card.ep"] = (
         "---\n"
         "from pydantic import BaseModel, Field\n"
         "class Props(BaseModel):\n"
@@ -106,7 +106,7 @@ def test_epresso_component_with_props_validation(tmp_path):
 
 def test_epresso_component_props_validation_rejects_bad(tmp_path):
     files = _site_files()
-    files["templates/components/Card.ep"] = (
+    files["components/Card.ep"] = (
         "---\n"
         "from pydantic import BaseModel\n"
         "class Props(BaseModel):\n"
@@ -122,7 +122,7 @@ def test_epresso_component_props_validation_rejects_bad(tmp_path):
 
 def test_epresso_scoped_css(tmp_path):
     files = _site_files()
-    files["templates/components/Button.ep"] = (
+    files["components/Button.ep"] = (
         "---\n"
         "---\n"
         "<style scoped>\n"
@@ -199,7 +199,7 @@ def test_component_is_global_style_renders_jinja_and_dedupes(tmp_path):
     multiple times (e.g. one code block per Highlight).
     """
     files = _site_files()
-    files["templates/components/Card.ep"] = (
+    files["components/Card.ep"] = (
         "---\n"
         "---\n"
         "<style is:global>{{ pygments_css('monokai', '.x') }}</style>\n"
@@ -208,8 +208,11 @@ def test_component_is_global_style_renders_jinja_and_dedupes(tmp_path):
     files["pages/index.ep"] = (
         "---\n"
         "---\n"
+        # one root per branch: the two sibling cards go in a zero-output group
+        "<Fragment>\n"
         "<Card></Card>\n"
         "<Card></Card>\n"
+        "</Fragment>\n"
     )
     root, site = _make(files, tmp_path)
     site.build()
@@ -261,7 +264,7 @@ def test_epresso_route_script_bundled_and_injected(tmp_path):
 
 def test_epresso_component_script_registered(tmp_path):
     files = _site_files()
-    files["templates/components/Badge.ep"] = (
+    files["components/Badge.ep"] = (
         "---\n"
         "---\n"
         "<script>\n"

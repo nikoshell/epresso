@@ -26,7 +26,7 @@ def test_redirect_routes_string_and_status(tmp_path):
             "[[redirects]]\n\"/old/\" = \"/new/\"\n\n"
             "[[redirects]]\n\"/temp/\" = { destination = \"/now/\", status = 302 }\n"
         ),
-        "pages/index.html": "index",
+        "pages/index.ep": "---\n---\nindex",
     }
     root, site = _make(files, tmp_path)
     site.build()
@@ -52,7 +52,7 @@ def test_build_redirects_toggle_off(tmp_path):
             "[build]\nredirects = false\n\n"
             "[[redirects]]\n\"/a/\" = \"/b/\"\n"
         ),
-        "pages/index.html": "index",
+        "pages/index.ep": "---\n---\nindex",
     }
     root, site = _make(files, tmp_path)
     site.build()
@@ -115,3 +115,28 @@ def test_epresso_lexer_frontmatter_delimiters():
 def test_pygments_css_helper():
     css = pygments_css()
     assert ".highlight" in css
+
+
+def test_pygments_css_pair_needs_no_scoping():
+    """One stylesheet per pair: every colour is light-dark(), so the code
+    palette follows color-scheme instead of a data-theme attribute."""
+    from epresso.markdown import pygments_css_pair
+    from epresso.pygments import EpressoThemeDark, EpressoThemeLight
+
+    css = pygments_css_pair(EpressoThemeLight, EpressoThemeDark, ".highlight")
+    assert "light-dark(" in css
+    # no attribute scoping, and one rule per selector rather than two
+    assert "data-theme" not in css
+    assert css.count(".highlight .k {") == 1
+    # a colour is paired, a non-colour declaration is passed through once
+    assert "color: light-dark(#087A44, #5FE0A6);" in css
+    assert "font-weight: bold;" in css
+    # colours hidden inside a shorthand are paired too
+    assert "border: 1px solid light-dark(#C23B3B, #E06A6A);" in css
+    # and it is smaller than the two scoped stylesheets it replaces
+    from epresso.markdown import pygments_css
+
+    scoped = pygments_css(EpressoThemeLight, ':global(html[data-theme="light"]) .highlight') + pygments_css(
+        EpressoThemeDark, ':global(html[data-theme="dark"]) .highlight'
+    )
+    assert len(css) < len(scoped)

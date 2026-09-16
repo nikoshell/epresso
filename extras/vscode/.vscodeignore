@@ -1,0 +1,4 @@
+# Keep the packaged .vsix to just the extension files.
+.vscode/**
+**/*.vsix
+**/.DS_Store

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,16 +14,14 @@ from .components import install as install_components
 from .document import strip_frontmatter
 from .errors import TemplateError
 from .jsx import JsxTagsExtension
-from .markdown import pygments_css
+from .markdown import pygments_css, pygments_css_pair
 
 
 class EpressoFileSystemLoader(FileSystemLoader):
     """FileSystemLoader that strips ``--- ... ---`` Python frontmatter from
-    ``.ep`` files before Jinja parses them.
-
-    Needed so ``{% extends 'layouts/base.ep' %}`` and component/layout loads
-    see only the Jinja body (the delimiter would otherwise render as literal
-    text, since Jinja is a text loader, not a ``.ep`` frontmatter parser).
+    ``.ep`` files before Jinja parses them, so a component or layout body is
+    loaded as plain Jinja (the delimiter would otherwise render as literal
+    text).
     """
 
     def get_source(self, environment: Any, template: str):
@@ -32,17 +31,16 @@ class EpressoFileSystemLoader(FileSystemLoader):
         return contents, filename, uptodate
 
 
-def build_environment(config: Any, pages_dir: Path | None = None) -> Environment:
-    """Build the Jinja environment from the configured layout/component/template roots.
+def build_environment(config: Any, pages_dir: Path | None = None, extra_roots: Sequence[Path] = ()) -> Environment:
+    """Build the Jinja environment from ``layouts/`` and ``components/``.
 
-    Loads from ``layouts/`` and ``components/`` (the default structure), plus the
-    legacy ``templates/`` root when present, and ``pages/`` (so pages can be used as
-    templates / extend layouts).
+    ``pages/`` is added so pages can be used as templates / extend layouts.
+    ``extra_roots`` are external layers appended *after* the site's own roots, so
+    the site always wins (see :mod:`epresso.layers`).
     """
     roots = [config.dir_layouts(), config.dir_components()]
-    if config.dir_templates().exists():
-        roots.append(config.dir_templates())
-    loaders = [EpressoFileSystemLoader(str(d)) for d in roots if d.exists()]
+    roots.extend(extra_roots)
+    loaders = [EpressoFileSystemLoader(str(d)) for d in _dedupe(roots) if d.exists()]
     if pages_dir and pages_dir.exists():
         loaders.append(EpressoFileSystemLoader(str(pages_dir)))
     env = Environment(
@@ -53,6 +51,19 @@ def build_environment(config: Any, pages_dir: Path | None = None) -> Environment
     install_components(env)
     env.add_extension(JsxTagsExtension)
     return env
+
+
+def _dedupe(paths: Sequence[Path]) -> list[Path]:
+    """Paths in order, dropping repeats (resolved) so a layer can't shadow itself."""
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for p in paths:
+        key = p.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
 
 
 class CuratedGlobals:
@@ -101,7 +112,7 @@ class CuratedGlobals:
         path: str = "/",
         og_type: str = "website",
     ) -> str:
-        """Render standard <meta> / Open Graph head tags."""
+        """Render standard <meta> / Open Graph / Twitter head tags."""
         from markupsafe import Markup
 
         site = self._site
@@ -118,6 +129,10 @@ class CuratedGlobals:
             f'<meta property="og:url" content="{url}">',
             f'<meta property="og:description" content="{desc}">' if desc else "",
             f'<meta property="og:image" content="{image}">' if image else "",
+            f'<meta name="twitter:card" content="{"summary_large_image" if image else "summary"}">',
+            f'<meta name="twitter:title" content="{name}">',
+            f'<meta name="twitter:description" content="{desc}">' if desc else "",
+            f'<meta name="twitter:image" content="{image}">' if image else "",
         ]
         return Markup("\n".join(t for t in tags if t))
 
@@ -197,12 +212,15 @@ class CuratedGlobals:
 
 
 def bind_globals(env: Environment, site: Any) -> None:
+    from . import __version__  # local import: the package is fully loaded by now
+
     g = CuratedGlobals(site)
     env.globals.update(
         {
             "site": site,
             "_render_session": site.session,  # side-band render output (scoped CSS + scripts)
             "url": g.url,
+            "epresso_version": __version__,
             "asset": g.asset,
             "image": g.image,
             "picture": g.picture,
@@ -215,39 +233,33 @@ def bind_globals(env: Environment, site: Any) -> None:
             "md_page_data": g.md_page_data,
             "highlight_title": g.highlight_title,
             "pygments_css": lambda theme="default", selector=".highlight": Markup(pygments_css(theme, selector)),
+            "pygments_css_pair": lambda light="default", dark="default", selector=".highlight": Markup(
+                pygments_css_pair(light, dark, selector)
+            ),
             "env": site.env_name,
             "env_vars": site.env_vars,
         }
     )
 
 
-def render_template(env: Environment, name: str, ctx: dict[str, Any]) -> str:
-    try:
-        template = env.get_template(name)
-    except JinjaError as e:
-        raise TemplateError(f"cannot load template {name!r}: {e}") from e
-    try:
-        return template.render(**ctx)
-    except JinjaError as e:
-        raise TemplateError(f"error rendering {name!r}: {e}") from e
+def _layout_component_name(layout: str) -> str:
+    """Normalize a front-matter ``layout:`` value to a component name.
 
-
-def _layout_is_slot(env: Environment, layout: str) -> bool:
-    """Whether a layout uses the slot model (contains ``<slot`` or composes
-    via ``{% component %}``) vs. classic Jinja blocks."""
-    if env.loader is None:
-        return False
-    names = [layout, layout + ".ep"]
-    if not layout.startswith("layouts/"):
-        names += ["layouts/" + layout, "layouts/" + layout + ".ep"]
-    for name in names:
-        try:
-            source, _, _ = env.loader.get_source(env, name)
-        except Exception:  # noqa: BLE001
-            continue
-        if "<slot" in source or "{% component" in source:
-            return True
-    return False
+    Accepts ``Base``, ``Base.ep``, ``layouts/Base`` and ``layouts/Base.ep``.
+    """
+    name = layout.strip()
+    if name.lower().endswith(".html"):
+        raise TemplateError(
+            f"layout {layout!r}: .html layouts are not supported",
+            fix="use a layout component — a layouts/<Name>.ep file with <slot/>, "
+            "referenced as `layout: <Name>`",
+        )
+    if name.endswith(".ep"):
+        name = name[:-3]
+    for prefix in ("layouts/", "components/"):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+    return name
 
 
 def render_markdown_page(
@@ -260,7 +272,12 @@ def render_markdown_page(
     site: Any,
     route_path: str,
 ) -> str:
-    """Render a direct Markdown page, wrapping content in the front-matter layout."""
+    """Render a direct Markdown page, wrapping content in the front-matter layout.
+
+    A layout is a **layout component** (``.ep``). Its title is passed both as a
+    ``title`` prop and as a ``slot="title"`` fragment, and the rendered Markdown
+    is the default slot.
+    """
     ctx: dict[str, Any] = {
         "site": site,
         "page": {**frontmatter, "title": title},
@@ -270,23 +287,18 @@ def render_markdown_page(
         "content": Markup(content_html),
     }
     if layout:
-        # Compose via slots ({% component %}) when the layout is slot-based,
-        # otherwise fall back to classic block inheritance ({% extends %}).
-        if _layout_is_slot(env, layout):
-            # Pass the title as a prop (layouts reading props.title) AND as a
-            # named-slot fragment (layouts with <slot name="title" />); content
-            # as the default slot.
-            child_src = (
-                "{% component " + repr(layout) + ", title=page.title %}"
-                '<Fragment slot="title">{{ page.title }}</Fragment>'
-                "{{ content | safe }}"
-                "{% endcomponent %}"
-            )
-        else:
-            child_src = "{% extends " + repr(layout) + " %}{% block content %}{{ content | safe }}{% endblock %}"
+        name = _layout_component_name(layout)
+        child_src = (
+            "{% component " + repr(name) + ", title=page.title %}"
+            '<Fragment slot="title">{{ page.title }}</Fragment>'
+            "{{ content | safe }}"
+            "{% endcomponent %}"
+        )
         child = env.from_string(child_src)
         try:
-            return child.render(**ctx)
+            from .components import unwrap_fragments
+
+            return unwrap_fragments(child.render(**ctx))
         except JinjaError as e:
             raise TemplateError(f"error rendering layout {layout!r}: {e}") from e
     # No layout: emit a minimal standalone HTML document.

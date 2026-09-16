@@ -93,6 +93,24 @@ def test_epresso_no_frontmatter():
     assert doc.body == "<div>hi</div>\n"
 
 
+def test_epresso_sidecar_lines_by_kind():
+    """Sidecar blocks are recorded per kind (inline scripts included), which the
+    .ep file-shape rule uses to cap them at one each."""
+    raw = (
+        "---\n---\n"
+        "<style>.a{}</style>\n"
+        "<style is:global>.g{}</style>\n"
+        "<script>window.x=1</script>\n"
+        "<script is:inline>var y=2;</script>\n"
+        "<div>x</div>\n"
+    )
+    doc = parse_document(raw, "ep")
+    assert doc.line_offset == 2  # the two --- lines
+    assert doc.sidecars.scoped_styles == (1,)  # lines are body-relative
+    assert doc.sidecars.global_styles == (2,)
+    assert doc.sidecars.scripts == (3, 4)  # inline scripts count too
+
+
 def test_strip_frontmatter_returns_body_only():
     assert strip_frontmatter("---\ntitle: T\n---\n# Body\n") == "# Body\n"
     assert strip_frontmatter("# no fm\n") == "# no fm\n"

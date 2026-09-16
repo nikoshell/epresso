@@ -20,12 +20,13 @@ from .content.store import RenderedContent
 from .document import parse_document
 from .images import ImagePipeline
 from .incremental import BuildGraph, RenderedBodyCache
+from .layers import Layer, resolve_layers
 from .logger import get_logger
 from .markdown import render_markdown
 from .plugins import PluginManager
 from .render import RenderSession
 from .routing import Route, RouteError, discover_route_patterns, expand_pattern, output_path_for
-from .templates import bind_globals, build_environment, render_markdown_page, render_template
+from .templates import bind_globals, build_environment, render_markdown_page
 
 __all__ = ["Site", "BuildResult"]
 
@@ -77,6 +78,7 @@ class Site:
         # Content dependency tracking + the incremental cache live in the build
         # graph, not on Site — see BuildGraph.
         self.graph = BuildGraph(self.store, self.config)
+        self.layers: list[Layer] = []  # resolved [layers] roots (populated in _do_load)
         self._route_metadata: dict[str, Any] = {}
         self._use_rendered_cache = False  # build path reuses persisted content bodies
         # Side-band render output (scoped CSS + client scripts) lives in the
@@ -181,15 +183,17 @@ class Site:
 
     def _do_load(self) -> None:
         self.store = ContentStore()  # idempotent reload: recreate the store
-        self.graph = BuildGraph(self.store, self.config)  # fresh graph + cache per load
+        self.layers = resolve_layers(self.config)  # external component/layout roots
+        layer_dirs = [layer.root for layer in self.layers]
+        self.graph = BuildGraph(self.store, self.config, layer_dirs)  # fresh graph + cache per load
         self.assets = AssetPipeline(self.config)  # fresh reference map per load
         self.images = ImagePipeline(self.config)  # fresh transform map per load
         self._link_resolver = None  # rebuild from fresh routes on (re)load
         self._html_transforms = []  # idempotent: plugin transforms re-register each load
         self.plugins.run_hook("before_load", self)
-        load_collections(self.store, self.config.root)
+        load_collections(self.store, self.config.root, self.config.source_root())
         self._render_content_bodies()
-        self.env = build_environment(self.config, self.config.dir_pages())
+        self.env = build_environment(self.config, self.config.dir_pages(), layer_dirs)
         bind_globals(self.env, self)
         self.plugins.run_hook("on_setup", self)  # globals/filters/transforms (also used in dev)
         self.plugins.run_hook("after_load", self)
@@ -302,7 +306,7 @@ class Site:
             if route.body is not None:
                 # endpoint
                 return route.body, route.content_type
-            if route.template or route.template_str:
+            if route.template_str:
                 # If the route's data is a content Entry, surface front matter as
                 # ``props`` and rendered Markdown as ``content``.
                 from markupsafe import Markup
@@ -322,8 +326,6 @@ class Site:
                     ctx.update(route.frontmatter)
                 if route.template_str:
                     html = self.env.from_string(route.template_str).render(**ctx)
-                elif route.template:
-                    html = render_template(self.env, route.template, ctx)
                 else:
                     html = ""
                 if route.scoped_css:
@@ -500,6 +502,7 @@ class Site:
         _t = time.monotonic()
         outputs.write_sitemap(self, out_dir, routes)
         outputs.write_robots(self, out_dir)
+        outputs.write_llms(self, out_dir, routes)
         outputs.write_rss(self, out_dir, routes)
         outputs.write_404(self, out_dir, routes)
         outputs.write_search_index(self, out_dir, routes, rendered_pages)

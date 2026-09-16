@@ -1,0 +1,255 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Epresso",
+  "scopeName": "text.epresso",
+  "fileTypes": ["ep"],
+  "comment": "epresso .ep = Python frontmatter + Jinja/HTML body + component tags + <style>/<script> sidecars.",
+  "patterns": [
+    { "include": "#frontmatter" },
+    { "include": "#fragmentShorthand" },
+    { "include": "#fragmentTag" },
+    { "include": "#slotTag" },
+    { "include": "#componentTag" },
+    { "include": "#jinja" },
+    { "include": "text.html.basic" }
+  ],
+  "repository": {
+    "frontmatter": {
+      "name": "meta.frontmatter.epresso",
+      "comment": "--- Python frontmatter (route logic, Props model) ---",
+      "begin": "\\A---[ \\t]*\\n",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.frontmatter.begin.epresso" }
+      },
+      "end": "^---[ \\t]*$",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.frontmatter.end.epresso" }
+      },
+      "contentName": "meta.embedded.block.python.epresso",
+      "patterns": [
+        { "include": "source.python" }
+      ]
+    },
+
+    "fragmentShorthand": {
+      "patterns": [
+        {
+          "name": "meta.tag.fragment.epresso",
+          "match": "</>",
+          "captures": { "0": { "name": "punctuation.definition.tag.epresso" } }
+        },
+        {
+          "name": "meta.tag.fragment.epresso",
+          "match": "<>",
+          "captures": { "0": { "name": "punctuation.definition.tag.epresso" } }
+        }
+      ]
+    },
+
+    "fragmentTag": {
+      "patterns": [
+        {
+          "name": "meta.tag.fragment.epresso",
+          "begin": "<(Fragment)\\b",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.tag.begin.epresso" },
+            "1": { "name": "entity.name.tag.fragment.epresso" }
+          },
+          "end": "(/?)>",
+          "endCaptures": { "0": { "name": "punctuation.definition.tag.end.epresso" } },
+          "patterns": [{ "include": "#tagAttributes" }]
+        },
+        {
+          "name": "meta.tag.fragment.epresso",
+          "match": "</(Fragment)\\s*>",
+          "captures": {
+            "0": { "name": "punctuation.definition.tag.epresso" },
+            "1": { "name": "entity.name.tag.fragment.epresso" }
+          }
+        }
+      ]
+    },
+
+    "slotTag": {
+      "patterns": [
+        {
+          "name": "meta.tag.slot.epresso",
+          "begin": "<(slot)\\b",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.tag.begin.epresso" },
+            "1": { "name": "entity.name.tag.slot.epresso" }
+          },
+          "end": "(/?)>",
+          "endCaptures": { "0": { "name": "punctuation.definition.tag.end.epresso" } },
+          "patterns": [{ "include": "#tagAttributes" }]
+        },
+        {
+          "name": "meta.tag.slot.epresso",
+          "match": "</(slot)\\s*>",
+          "captures": {
+            "0": { "name": "punctuation.definition.tag.epresso" },
+            "1": { "name": "entity.name.tag.slot.epresso" }
+          }
+        }
+      ]
+    },
+
+    "componentTag": {
+      "patterns": [
+        {
+          "name": "meta.tag.component.epresso",
+          "comment": "component tags start uppercase; <Name:dir /> disambiguates",
+          "begin": "<([A-Z][A-Za-z0-9_]*(?::[A-Za-z0-9_]+)*)",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.tag.begin.epresso" },
+            "1": { "name": "entity.name.tag.component.epresso" }
+          },
+          "end": "(/?)>",
+          "endCaptures": { "0": { "name": "punctuation.definition.tag.end.epresso" } },
+          "patterns": [{ "include": "#tagAttributes" }]
+        },
+        {
+          "name": "meta.tag.component.epresso",
+          "match": "</([A-Z][A-Za-z0-9_]*(?::[A-Za-z0-9_]+)*)\\s*>",
+          "captures": {
+            "0": { "name": "punctuation.definition.tag.epresso" },
+            "1": { "name": "entity.name.tag.component.epresso" }
+          }
+        }
+      ]
+    },
+
+    "tagAttributes": {
+      "patterns": [
+        { "include": "#jsxProp" },
+        { "include": "#tagStringDouble" },
+        { "include": "#tagStringSingle" },
+        { "include": "#tagAttributeName" }
+      ]
+    },
+
+    "tagAttributeName": {
+      "match": "[A-Za-z_][-A-Za-z0-9_:]*",
+      "captures": { "0": { "name": "entity.other.attribute-name.epresso" } }
+    },
+
+    "jsxProp": {
+      "name": "meta.embedded.expression.epresso",
+      "comment": "{expr} prop value (a Jinja expression)",
+      "begin": "\\{",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.epresso" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.epresso" } },
+      "patterns": [
+        { "include": "#jinja" },
+        { "include": "#tagStringDouble" },
+        { "include": "#tagStringSingle" }
+      ]
+    },
+
+    "tagStringDouble": {
+      "name": "string.quoted.double.epresso",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.epresso" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.epresso" } },
+      "patterns": [{ "include": "#jinja" }]
+    },
+
+    "tagStringSingle": {
+      "name": "string.quoted.single.epresso",
+      "begin": "'",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.epresso" } },
+      "end": "'",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.epresso" } },
+      "patterns": [{ "include": "#jinja" }]
+    },
+
+    "jinja": {
+      "patterns": [
+        { "include": "#jinjaComment" },
+        { "include": "#jinjaExpression" },
+        { "include": "#jinjaStatement" }
+      ]
+    },
+
+    "jinjaComment": {
+      "name": "comment.block.jinja.epresso",
+      "begin": "\\{#-?",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.jinja.epresso" } },
+      "end": "-?#\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.comment.end.jinja.epresso" } }
+    },
+
+    "jinjaExpression": {
+      "name": "meta.embedded.expression.jinja.epresso",
+      "begin": "\\{\\{-?",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.jinja.epresso" } },
+      "end": "-?\\}\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.jinja.epresso" } },
+      "patterns": [{ "include": "#jinjaInner" }]
+    },
+
+    "jinjaStatement": {
+      "name": "meta.embedded.statement.jinja.epresso",
+      "begin": "\\{%-?",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.jinja.epresso" } },
+      "end": "-?%\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.jinja.epresso" } },
+      "patterns": [{ "include": "#jinjaInner" }]
+    },
+
+    "jinjaInner": {
+      "patterns": [
+        { "include": "#jinjaKeyword" },
+        { "include": "#jinjaFilter" },
+        { "include": "#jinjaStringDouble" },
+        { "include": "#jinjaStringSingle" },
+        { "include": "#jinjaNumber" },
+        { "include": "#jinjaOperator" },
+        { "include": "#jinjaName" }
+      ]
+    },
+
+    "jinjaKeyword": {
+      "match": "\\b(if|elif|else|endif|for|endfor|in|set|endset|block|endblock|macro|endmacro|call|endcall|filter|endfilter|with|endwith|raw|endraw|extends|include|import|from|as|and|or|not|is|none|None|true|True|false|False|component|endcomponent)\\b",
+      "captures": { "0": { "name": "keyword.control.jinja.epresso" } }
+    },
+
+    "jinjaFilter": {
+      "match": "\\|\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": { "1": { "name": "support.function.filter.jinja.epresso" } }
+    },
+
+    "jinjaStringDouble": {
+      "name": "string.quoted.double.jinja.epresso",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.jinja.epresso" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.jinja.epresso" } }
+    },
+
+    "jinjaStringSingle": {
+      "name": "string.quoted.single.jinja.epresso",
+      "begin": "'",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.jinja.epresso" } },
+      "end": "'",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.jinja.epresso" } }
+    },
+
+    "jinjaNumber": {
+      "match": "\\b\\d+(\\.\\d+)?\\b",
+      "captures": { "0": { "name": "constant.numeric.jinja.epresso" } }
+    },
+
+    "jinjaOperator": {
+      "match": "[+\\-*/%~=<>!&|.,:]+",
+      "captures": { "0": { "name": "keyword.operator.jinja.epresso" } }
+    },
+
+    "jinjaName": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+      "captures": { "0": { "name": "variable.other.jinja.epresso" } }
+    }
+  }
+}

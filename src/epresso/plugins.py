@@ -220,7 +220,8 @@ class Capabilities:
         )
         installed = col.install(self.site.store)
         if isinstance(installed.loader, GlobLoader):
-            installed.loader.base = (self.site.config.root / installed.loader.base).resolve()
+            base = self.site.config.source_root()
+            installed.loader.base = (base / installed.loader.base).resolve()
         installed.loader.load(self.site.store, installed)
 
     def add_markdown_extension(self, spec: str) -> None:

@@ -213,14 +213,85 @@ def _pygments_highlight(
 
 
 def pygments_css(theme: str = "default", selector: str = ".highlight") -> str:
-    """Return the Pygments CSS for a theme (link it in your layout for highlighted code).
+    """Return the Pygments CSS for one theme (link it in your layout).
 
     ``selector`` lets you scope the rules (e.g. under ``html[data-theme="light"]``)
-    so a light palette can be served for the light theme.
+    so a light palette can be served for the light theme. Prefer
+    :func:`pygments_css_pair` when a site has both palettes: it needs no scoping.
     """
     from pygments.formatters import HtmlFormatter
 
     return HtmlFormatter(style=theme).get_style_defs(selector)
+
+
+# Colours inside a value, for pairing the light and dark palettes.
+_COLOUR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)")
+_COLOUR_PROPS = {
+    "color",
+    "background",
+    "background-color",
+    "border-color",
+    "border-top-color",
+    "border-right-color",
+    "border-bottom-color",
+    "border-left-color",
+    "outline",
+    "outline-color",
+    "text-decoration-color",
+    "caret-color",
+}
+
+
+def _css_blocks(css: str) -> dict[str, list[tuple[str, str]]]:
+    """Split Pygments' generated CSS into ``{selector: [(property, value), …]}``."""
+    out: dict[str, list[tuple[str, str]]] = {}
+    for match in re.finditer(r"([^{}]+)\{([^{}]*)\}", css):
+        decls = out.setdefault(match.group(1).strip(), [])
+        for decl in match.group(2).split(";"):
+            if ":" in decl:
+                prop, value = decl.split(":", 1)
+                decls.append((prop.strip(), value.strip()))
+    return out
+
+
+def _pair(prop: str, light: str, dark: str) -> str:
+    """One ``light-dark()`` declaration: pair the colours, keep the rest.
+
+    Falls back to the light value when a shorthand's colours don't line up
+    (nothing to pair) — with palettes that mirror each other, as epresso's do,
+    that doesn't happen.
+    """
+    if prop in _COLOUR_PROPS:
+        return f"light-dark({light}, {dark})"
+    light_colours, dark_colours = _COLOUR_RE.findall(light), _COLOUR_RE.findall(dark)
+    if not light_colours or len(light_colours) != len(dark_colours):
+        return light
+    for light_colour, dark_colour in zip(light_colours, dark_colours, strict=True):
+        light = light.replace(light_colour, f"light-dark({light_colour}, {dark_colour})", 1)
+    return light
+
+
+def pygments_css_pair(light: str = "default", dark: str = "default", selector: str = ".highlight") -> str:
+    """Pygments CSS where every colour is ``light-dark(light, dark)``.
+
+    One stylesheet instead of one per theme, scoped by ``html[data-theme=…]``: the
+    palette follows ``color-scheme`` — the OS preference, or whatever the page
+    sets — exactly like an epresso theme's own ``light-dark()`` design tokens. So
+    no attribute has to be published by script, and the code palette can't drift
+    from the page palette. Non-colour declarations are taken from ``light``.
+    """
+    light_blocks = _css_blocks(pygments_css(light, selector))
+    dark_blocks = _css_blocks(pygments_css(dark, selector))
+    rules = []
+    for selector_text, light_decls in light_blocks.items():
+        dark_decls = dict(dark_blocks.get(selector_text, []))
+        body = ""
+        for prop, light_value in light_decls:
+            dark_value = dark_decls.get(prop)
+            value = _pair(prop, light_value, dark_value) if dark_value and dark_value != light_value else light_value
+            body += f"  {prop}: {value};\n"
+        rules.append(f"{selector_text} {{\n{body}}}\n")
+    return "\n".join(rules)
 
 
 

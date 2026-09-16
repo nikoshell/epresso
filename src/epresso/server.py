@@ -146,9 +146,15 @@ class DevServer:
             if img.is_file() and self.site.config.dir_output().resolve() in img.parents:
                 return FileResponse(img)
         # public/ files live at the URL root (/favicon.ico → public/favicon.ico)
-        pub = (self.site.config.dir_static() / rel).resolve()
-        if pub.is_file() and self.site.config.dir_static().resolve() in pub.parents:
-            return FileResponse(pub)
+        pub_root = self.site.config.dir_static().resolve()
+        pub = (pub_root / rel).resolve()
+        if pub == pub_root or pub_root in pub.parents:
+            if pub.is_file():
+                return FileResponse(pub)
+            # directory index (e.g. a static subsite at public/docs/ served at /docs/)
+            idx = pub / "index.html"
+            if pub.is_dir() and idx.is_file():
+                return FileResponse(idx)
         # top-level assets/ files (favicon.svg, robots.txt) are copied to the output
         # root at build time; serve them at the root URL in dev too.
         assets_root = self.site.config.dir_assets()
@@ -231,10 +237,11 @@ class DevServer:
         watch_root = self.site.config.root
 
         # Directories whose changes must never trigger a reload: vendored/
-        # generated output (dist is written as dev serves scoped css), git/VCS,
-        # dependencies and the local scratch dir. watchfiles has no ignore_dirs
-        # kwarg, so filter events by path here.
-        _IGNORED_DIRS = {"node_modules", ".git", ".venv", "dist", "__pycache__", ".ep"}
+        # generated output (dist is written as dev serves scoped css, .cache holds
+        # the incremental + fetched-layer cache), git/VCS, dependencies and the
+        # local scratch dir. watchfiles has no ignore_dirs kwarg, so filter events
+        # by path here.
+        _IGNORED_DIRS = {"node_modules", ".git", ".venv", "dist", "__pycache__", ".ep", ".cache"}
 
         async def watcher():
             # watchfiles.watch() is a *blocking* generator. Push its batches into a
@@ -242,11 +249,19 @@ class DevServer:
             # event loop so it stays serialized with requests.
             from watchfiles import watch
 
+            # Local layer dirs live outside the project root by design; watch them
+            # too so editing a vendored/adjacent components dir reloads the page.
+            watch_paths = [str(watch_root)]
+            for layer in getattr(self.site, "layers", []):
+                inside = layer.root == watch_root or watch_root in layer.root.parents
+                if layer.kind == "path" and not inside:
+                    watch_paths.append(str(layer.root))
+
             events_q: asyncio.Queue = asyncio.Queue()
 
             def _produce() -> None:
                 try:
-                    for changes in watch(str(watch_root)):
+                    for changes in watch(*watch_paths):
                         events_q.put_nowait(changes)
                 except Exception as e:  # noqa: BLE001
                     log.error(f"file watcher stopped: {e}")

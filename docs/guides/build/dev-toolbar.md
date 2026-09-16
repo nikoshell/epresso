@@ -83,6 +83,30 @@ If the current page is marked `draft` or `private`, a status pill appears at the
 bottom-right so you know it won't be in the production build. A small toast
 also announces dev-server rebuilds (and error toasts on failures).
 
+## Keyboard shortcuts
+
+Two shortcuts drive the toolbar, and since the toolbar only ever appears when
+an epresso server serves the page (see above), they exist in development only —
+a production build has neither the shortcuts nor the handler:
+
+| keys | action |
+|------|--------|
+| `Shift`+`Alt`+`D` | show/hide the toolbar |
+| `Shift`+`Alt`+`I` | toggle **inspect** mode (hover to highlight, click to pin) |
+
+`Shift`+`Alt` rather than `Ctrl`/`⌘`+`Shift` keeps clear of browser-reserved
+combos (`Ctrl+Shift+D` bookmarks all tabs, `Ctrl+Shift+I`/`Ctrl+Shift+C` open
+the browser's own devtools). The keys are matched on the physical key (`e.code`),
+so they work on non-QWERTY layouts too, and never fire while you're typing in an
+input. Both are also listed in **settings**.
+
+## Colour scheme
+The site follows the OS preference. This button emulates the other one while you
+work: it cycles **system → dark → light** (monitor, moon, sun), remembers the
+choice in the toolbar's localStorage prefs, and applies it by setting
+`data-theme-emulated` on `<html>` — the theme keeps owning `data-theme`, so
+`system` hands control straight back to the OS.
+
 ## Configuration
 
 `[dev.toolbar]` in `site.toml`:

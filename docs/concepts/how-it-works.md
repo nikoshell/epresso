@@ -11,7 +11,7 @@ epresso is a **build-time static generator**:
    build is incremental: only what changed re-renders.
 5. **Render** — Markdown/`.ep` render to HTML with scoped CSS + optional client
    scripts; outputs are deduplicated and minified.
-6. **Output** — `dist/` plus generated `sitemap.xml`, `robots.txt`, search index.
+6. **Output** — `dist/` plus generated `sitemap.xml`, `robots.txt`, `llms.txt`, search index.
 
 `epresso dev` serves the same render path with live reload; `epresso build` writes
 `dist/`.

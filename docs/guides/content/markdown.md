@@ -30,7 +30,6 @@ is filled with the rendered HTML.
 highlight = true        # Pygments syntax highlighting for fenced code
 add_slug_ids = true     # add id attributes to headings
 autolink_headings = true
-toc_heading = null      # optional heading used for a table of contents
 extensions = []         # extra markdown-it features
 components = []         # custom component tags to resolve inside markdown
 ```

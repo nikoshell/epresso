@@ -37,26 +37,29 @@ def site(tmp_path):
         "content/posts/b.md": (
             "---\ntitle: B\ndate: 2026-01-01\ntags: [x, y]\n---\n# Bee\n"
         ),
-        "templates/layouts/base.html": (
-            "<!doctype html><html><head><title>{% block title %}{{ page.title if page is defined else 'epresso' }}{% endblock %}</title></head>"
-            "<body>{% block content %}{% endblock %}</body></html>\n"
+        "layouts/Base.ep": (
+            "---\n"
+            "from pydantic import BaseModel\n"
+            "class Props(BaseModel):\n"
+            "    title: str = 'epresso'\n"
+            "---\n"
+            "<!doctype html><html><head><title>{{ props.title }}</title></head>"
+            "<body>{{ content }}</body></html>\n"
         ),
         "pages/index.md": (
-            "---\ntitle: Home\nlayout: layouts/base.html\n---\n# Welcome\n"
+            "---\ntitle: Home\nlayout: Base\n---\n# Welcome\n"
         ),
-        "pages/blog/index.html": (
-            "{% extends 'layouts/base.html' %}{% block title %}Blog{% endblock %}"
-            "{% block content %}<ul>{% for p in get_collection('posts') %}"
-            "<li>{{ p.data.title }}</li>{% endfor %}</ul>{% endblock %}\n"
+        "pages/blog/index.ep": (
+            "---\n---\n"
+            '<Base title="Blog"><ul>{% for p in get_collection(\'posts\') %}'
+            "<li>{{ p.data.title }}</li>{% endfor %}</ul></Base>\n"
         ),
-        "pages/blog/[slug].html": (
-            "{% extends 'layouts/base.html' %}{% block title %}{{ props.title }}{% endblock %}"
-            "{% block content %}<h1>{{ props.title }}</h1>{{ content|safe }}{% endblock %}\n"
-        ),
-        "pages/blog/[slug].py": (
-            "from epresso.routing import Route\n"
+        "pages/blog/[slug].ep": (
+            "---\n"
             "def get_static_paths():\n"
-            "    return [Route(path='/blog/'+p.id+'/', params={'slug': p.id}, data=p) for p in site.get_collection('posts')]\n"
+            "    return [dict(params={'slug': p.id}, data=p) for p in site.get_collection('posts')]\n"
+            "---\n"
+            "<Base title={props.title}><h1>{{ props.title }}</h1>{{ content }}</Base>\n"
         ),
         "pages/data.json.py": (
             "import json\n"

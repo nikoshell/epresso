@@ -43,3 +43,41 @@ jobs:
           uv run --project ${{ github.workspace }} epresso init .
           uv run --project ${{ github.workspace }} epresso build .
           test -f dist/index.html && echo "smoke build OK"
+
+  perf:
+    name: build-time regression gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          # Pinned to the interpreter scripts/perf_baseline.json was recorded on.
+          # The gate compares ratios, which shift when the interpreter does; a
+          # mismatch makes the run report-only rather than fail.
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --python 3.12
+
+      - name: Measure (regression gate)
+        run: |
+          mkdir -p perf
+          uv run --python 3.12 python scripts/bench.py --runs 3 --json perf/bench.json | tee perf/bench.log
+
+      - name: Flame graph (informational)
+        if: always()
+        continue-on-error: true
+        run: |
+          mkdir -p perf
+          uv run --python 3.12 py-spy record --format flamegraph \
+            --output perf/flame.svg -- python -m epresso build themes/docs
+
+      - name: Upload perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf
+          path: perf/
+          if-no-files-found: ignore

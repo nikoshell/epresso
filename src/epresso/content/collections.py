@@ -81,11 +81,17 @@ def discover_content_config(root: Path) -> list[Any]:
     return collections
 
 
-def load_collections(store: ContentStore, root: Path) -> None:
-    """Discover content.config.py, install collections, resolve bases, run loaders."""
+def load_collections(store: ContentStore, root: Path, source_root: Path | None = None) -> None:
+    """Discover content.config.py, install collections, resolve bases, run loaders.
+
+    ``root`` holds ``content.config.py``; collection ``base`` paths resolve
+    against ``source_root`` (``<root>/src`` when that dir exists), so a project
+    can move ``content/`` under ``src/`` without editing its config.
+    """
+    source_root = source_root or root
     for dc in discover_content_config(root):
         col = dc.install(store)
-        # Resolve the loader's base directory relative to the site root (not cwd).
+        # Resolve the loader's base directory relative to the source root (not cwd).
         if isinstance(col.loader, GlobLoader):
-            col.loader.base = (root / col.loader.base).resolve()
+            col.loader.base = (source_root / col.loader.base).resolve()
         col.loader.load(store, col)

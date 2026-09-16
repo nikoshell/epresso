@@ -1,0 +1,107 @@
+{
+  "name": "epresso",
+  "displayName": "Epresso",
+  "description": "Language support for the epresso .ep format — Python frontmatter, Jinja/HTML body, component tags.",
+  "version": "0.1.0",
+  "publisher": "epresso",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nikoshell/epresso"
+  },
+  "bugs": {
+    "url": "https://github.com/nikoshell/epresso/issues"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "keywords": [
+    "epresso",
+    "jinja",
+    "static site generator",
+    "ssg",
+    "ep"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:epresso"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "epresso",
+        "aliases": [
+          "Epresso",
+          "epresso",
+          "ep"
+        ],
+        "extensions": [
+          ".ep"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "epresso",
+        "scopeName": "text.epresso",
+        "path": "./syntaxes/epresso.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.python.epresso": "python",
+          "meta.embedded.expression.epresso": "python",
+          "text.html.basic": "html",
+          "source.css": "css",
+          "source.js": "javascript"
+        }
+      },
+      {
+        "scopeName": "text.epresso.injection",
+        "path": "./syntaxes/epresso-injection.tmLanguage.json",
+        "injectTo": [
+          "text.html.basic"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Epresso",
+      "properties": {
+        "epresso.format.executablePath": {
+          "type": "string",
+          "default": "epresso",
+          "markdownDescription": "Path to the `epresso` CLI used for formatting. Defaults to `epresso` on `PATH`."
+        },
+        "epresso.format.expand": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Pass `--expand` to `epresso fmt`: reflow the body one child per line."
+        },
+        "epresso.format.full": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Pass `--full` to `epresso fmt`: also format section contents (frontmatter Python, HTML, CSS, JS). Requires the `epresso[fmt]` extra."
+        },
+        "epresso.lsp.enable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Run the `epresso lsp` language server for live diagnostics (forbidden Jinja composition, file shape, sidecar caps, frontmatter syntax)."
+        },
+        "epresso.lsp.executablePath": {
+          "type": "string",
+          "default": "epresso",
+          "markdownDescription": "Path to the `epresso` CLI used to launch the language server. Defaults to `epresso` on `PATH`."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "[epresso]": {
+        "editor.defaultFormatter": "epresso.epresso",
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+      }
+    }
+  }
+}

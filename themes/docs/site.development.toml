@@ -5,3 +5,8 @@
 [content]
 show_drafts  = true
 show_private = true
+
+# Show build provenance (environment + epresso version) in the dev server's
+# footer. `debug` may also be a table of extra rows, e.g. { commit = "abc1234" }.
+[theme.footer]
+debug = true

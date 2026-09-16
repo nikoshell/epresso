@@ -48,3 +48,13 @@ htmlcov/
 # Tooling / misc
 .DS_Store
 *.log
+
+# Profiling artifacts
+epresso-profile.pstats
+perf/
+
+# Architecture review reports (local only)
+.arch-review/
+
+# Editor extension packages
+*.vsix

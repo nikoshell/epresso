@@ -21,6 +21,14 @@ Attribute syntax (JSX-style):
 
 Paired components support children, which may themselves contain components or
 arbitrary markup (recursively rewritten).
+
+``<Name:dir />`` disambiguates two components that share a basename in
+different subdirectories (e.g. ``components/comp1/A.ep`` and
+``components/comp2/A.ep``): ``<A:comp1 />`` / ``<A:comp2 />`` resolve to each
+directly, instead of ``<A />``'s plain-basename lookup (undefined when more
+than one file shares that basename outside the components/layouts roots).
+The qualifier goes after the name, not before, because a tag must start with
+an uppercase letter to be recognized as a component at all.
 """
 
 from __future__ import annotations
@@ -44,7 +52,10 @@ _PROTECTED = re.compile(
 # A quoted-string-aware attribute run, so a ``>`` inside a quoted value does not
 # end the tag early.
 _ATTRS = r"((?:[^\"'<>]|\"[^\"]*\"|'[^']*')*)"
-_OPEN = re.compile(r"<\s*([A-Z][A-Za-z0-9_]*)\b" + _ATTRS + r">", re.DOTALL)
+# The name itself must start uppercase (that's what makes it a component, not
+# plain HTML); one or more ":segment" qualifiers may follow to disambiguate a
+# basename that exists in more than one subdirectory (see module docstring).
+_OPEN = re.compile(r"<\s*([A-Z][A-Za-z0-9_]*(?::[A-Za-z0-9_]+)*)\b" + _ATTRS + r">", re.DOTALL)
 
 
 def _is_component(env: Any, name: str) -> bool:

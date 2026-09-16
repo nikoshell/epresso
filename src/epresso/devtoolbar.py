@@ -58,8 +58,16 @@ _TEMPLATE = r"""<div id="__epresso_toolbar" style="@TBSTYLE@" data-placement="@P
 #__epresso_toolbar .tb-hint{opacity:.5}
 #__epresso_toolbar .tb-debug pre{background:#161a22;padding:8px;border-radius:6px;white-space:pre-wrap;max-width:100%}
 #__epresso_toolbar .tb-field{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:4px 0;max-width:32rem}
+#__epresso_toolbar kbd{font:inherit;font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 3px;opacity:.7}
 #__epresso_toolbar .tb-toast{position:fixed;top:12px;right:12px;background:#0f1117;border:1px solid #3a4150;border-left:3px solid #7ee787;color:#e8ecf1;border-radius:6px;padding:7px 11px;display:none;max-width:70vw;z-index:10000}
 #__epresso_toolbar .tb-toast.err{border-left-color:#e5534b}
+#__epresso_toolbar .tb-toast.tb-toast-layout{align-items:center;flex-wrap:wrap;gap:2px;border-left-color:#9fd6ff}
+#__epresso_toolbar .tb-lcrumb{background:none;border:0;color:#9fd6ff;font:inherit;cursor:pointer;padding:2px 3px}
+#__epresso_toolbar .tb-lcrumb:hover{text-decoration:underline}
+#__epresso_toolbar .tb-lsep{opacity:.5}
+#__epresso_toolbar .tb-lc-edit{background:none;border:0;color:inherit;opacity:.8;cursor:pointer;padding:2px;display:inline-flex;align-items:center}
+#__epresso_toolbar .tb-lc-edit svg{width:11px;height:11px;display:block}
+#__epresso_toolbar .tb-lc-edit:hover{opacity:1;color:#7ee787}
 #__epresso_tb_status{position:fixed;right:14px;bottom:44px;background:#0f1117;border-radius:999px;padding:4px 11px;font:600 10px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.07em;border:1px solid;z-index:10001;box-shadow:0 2px 8px rgba(0,0,0,.45)}
 #__epresso_tb_status.tb-draft{color:#7a5a00;background:#f7d469;border-color:#e3b93e}
 #__epresso_tb_status.tb-private{color:#e8ecf1;background:#565b66;border-color:#6a6f7a}
@@ -78,6 +86,11 @@ _TEMPLATE = r"""<div id="__epresso_toolbar" style="@TBSTYLE@" data-placement="@P
 body.ep-inspect{cursor:crosshair}
 .ep-inspect-link{outline:2px solid #4cc2ff !important;outline-offset:1px}
 .ep-audit-hit{outline:2px dashed #f0b429 !important;outline-offset:1px}
+#__epresso_tb_layout{position:fixed;inset:0;z-index:9998;pointer-events:none;font:12px/1.4 system-ui,sans-serif}
+.tb-lbox{box-sizing:border-box;pointer-events:auto;cursor:pointer}
+.tb-lbox:hover{outline:2px solid #fff}
+.tb-lbox-bg{cursor:default}
+.tb-lbox-bg:hover{outline:none}
 #__epresso_toolbar .tb-pcomp,#__epresso_toolbar .tb-pcontent{display:block;width:100%;text-align:left;background:none;border:none;color:#e8ecf1;font:12px/1.6 monospace;padding:2px 4px;border-radius:4px;cursor:pointer}
 #__epresso_toolbar .tb-pcomp:hover,#__epresso_toolbar .tb-pcontent:hover{background:#262a33}
 #__epresso_toolbar .tb-pcomp.on,#__epresso_toolbar .tb-pcontent.on{color:#7ee787}
@@ -88,7 +101,9 @@ html{scroll-padding-bottom:64px}
 </style>
 <div class="tb-inner">
   <span class="tb-env" title="Build environment"><span class="tb-dot @ENVDOT@"></span> @ENV@</span>
-  <button class="tb-btn tb-icon" data-app="inspect" title="Inspect elements" aria-label="Inspect elements"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 1.5c-.41 0-.75.34-.75.75v11.35c0 .9 1.09 1.35 1.72.71l2.78-2.86 1.59 4.09c.14.36.55.53.91.38l.24-.09c.33-.13.51-.49.38-.82L12 11.5h3.48c.9 0 1.35-1.09.72-1.72l-9.23-8.79C6.52 1.56 6.02 1.5 5.5 1.5Z"/></svg></button>
+  <button class="tb-btn tb-icon" id="__epresso_tb_theme" aria-pressed="false" title="Colour scheme: system" aria-label="Emulate colour scheme"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.75 2.5A1.75 1.75 0 0 0 0 4.25v5.5c0 .966.784 1.75 1.75 1.75h4.5v1.5H4a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-2.25v-1.5h4.5A1.75 1.75 0 0 0 16 9.75v-5.5A1.75 1.75 0 0 0 14.25 2.5H1.75Zm0 1.5h12.5a.25.25 0 0 1 .25.25v5.5a.25.25 0 0 1-.25.25H1.75a.25.25 0 0 1-.25-.25v-5.5a.25.25 0 0 1 .25-.25Z"/></svg></button>
+  <button class="tb-btn tb-icon" data-app="inspect" title="Inspect elements (Shift+Alt+I)" aria-label="Inspect elements"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 1.5c-.41 0-.75.34-.75.75v11.35c0 .9 1.09 1.35 1.72.71l2.78-2.86 1.59 4.09c.14.36.55.53.91.38l.24-.09c.33-.13.51-.49.38-.82L12 11.5h3.48c.9 0 1.35-1.09.72-1.72l-9.23-8.79C6.52 1.56 6.02 1.5 5.5 1.5Z"/></svg></button>
+  <button class="tb-btn tb-icon" data-app="layout" title="Component layout (Shift+Alt+L)" aria-label="Component layout"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.25" y="1.25" width="13.5" height="13.5" rx="1.5"/><path d="M1.25 6.25h13.5M6.25 6.25v8.5"/></svg></button>
   <button class="tb-btn" data-app="routes">routes</button>
   <button class="tb-btn" data-app="content" title="Explore content">content</button>
   <button class="tb-btn" data-app="page" title="Content this page depends on">page</button>
@@ -98,7 +113,7 @@ html{scroll-padding-bottom:64px}
   <span class="tb-right">
     <code>@FILE@</code>
     @EDITOR@
-    <button class="tb-btn tb-icon" data-tb-dismiss title="Hide toolbar" aria-label="Hide toolbar"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg></button>
+    <button class="tb-btn tb-icon" data-tb-dismiss title="Hide toolbar (Shift+Alt+D)" aria-label="Hide toolbar"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg></button>
   </span>
 </div>
 <div class="tb-panels">
@@ -113,6 +128,7 @@ html{scroll-padding-bottom:64px}
   <section data-panel="audit"><ul class="tb-audit" data-audit-list></ul></section>
   <section data-panel="project"><h4>epresso @VERSION@</h4><p>@DESC@</p><p><button class="tb-btn" data-copy-debug>copy debug info</button> @LINKS@</p><h4>Debug info</h4><div class="tb-debug"><pre>@DEBUG@</pre></div></section>
   <section data-panel="settings">
+    <div class="tb-field"><span>shortcuts</span><span class="tb-hint"><kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>D</kbd> toolbar · <kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>I</kbd> inspect · <kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd> layout</span></div>
     <div class="tb-field"><span>placement</span><select data-opt="placement"><option value="bottom">bottom</option><option value="top">top</option></select></div>
     <div class="tb-field"><span>editor</span><select data-opt="editor"><option value="vscode">vscode</option><option value="nvim">nvim</option></select></div>
     <div class="tb-field"><label><input type="checkbox" data-opt="notify"> notifications</label></div>
@@ -129,7 +145,7 @@ html{scroll-padding-bottom:64px}
 <script>
 (function(){
   var tb=document.getElementById('__epresso_toolbar');if(!tb)return;
-  var map=@SCOPE_MAP@;var mode=false,last=null;var pageFile=@PAGE@;
+  var map=@SCOPE_MAP@;var mode=false,last=null;var pageFile=@PAGE@;var layoutMode=false;
   var pop=document.getElementById('__epresso_tb_pop');
   var toast=document.getElementById('__epresso_tb_toast');
   var panels=document.querySelector('.tb-panels');
@@ -142,19 +158,21 @@ html{scroll-padding-bottom:64px}
   function vlog(){ if(prefs.verbose&&window.console&&console.debug){console.debug.apply(console,arguments);} }
   // --- app switching (non-inspect apps open a panel) ---
   function inspBtn(){for(var i=0;i<btns.length;i++){if(btns[i].getAttribute('data-app')==='inspect')return btns[i];}return null;}
+  function layoutBtn(){for(var i=0;i<btns.length;i++){if(btns[i].getAttribute('data-app')==='layout')return btns[i];}return null;}
   function open(app){
     deactivateInspect();               // opening a panel exits inspect mode
+    deactivateLayout();                // ...and the layout view
     if(pop){pop.hidden=true;clearOutline();}
     tb.classList.add('open');
     try{sessionStorage.setItem('__epresso_app',app);}catch(e){}
-    btns.forEach(function(b){if(b===inspBtn())return;b.classList.toggle('on',b.getAttribute('data-app')===app);});
+    btns.forEach(function(b){if(b===inspBtn()||b===layoutBtn())return;b.classList.toggle('on',b.getAttribute('data-app')===app);});
     Array.prototype.forEach.call(panels.querySelectorAll('section'),function(s){s.classList.toggle('active',s.getAttribute('data-panel')===app);});
     if(app==='audit')runAudit();
     if(app==='settings')loadSettingsUI();
     positionStatus();
     fitBodyPad();   // reserve space for the (taller) open panel
   }
-  function close(){tb.classList.remove('open');try{sessionStorage.removeItem('__epresso_app');}catch(e){}btns.forEach(function(b){if(b===inspBtn())return;b.classList.remove('on');});positionStatus();fitBodyPad();}
+  function close(){tb.classList.remove('open');try{sessionStorage.removeItem('__epresso_app');}catch(e){}btns.forEach(function(b){if(b===inspBtn()||b===layoutBtn())return;b.classList.remove('on');});positionStatus();fitBodyPad();}
   function deactivateInspect(){
     mode=false;var ib=inspBtn();if(ib)ib.classList.remove('on');
     document.body.classList.remove('ep-inspect');
@@ -162,15 +180,66 @@ html{scroll-padding-bottom:64px}
   function toggleInspect(){
     var ib=inspBtn();
     if(mode){deactivateInspect();}
-    else{mode=true;document.body.classList.add('ep-inspect');if(ib)ib.classList.add('on');close();}
+    else{mode=true;document.body.classList.add('ep-inspect');if(ib)ib.classList.add('on');close();deactivateLayout();}
   }
   btns.forEach(function(b){b.onclick=function(){
     var app=b.getAttribute('data-app');
     if(app==='inspect'){toggleInspect();return;}
+    if(app==='layout'){toggleLayout();return;}
     if(tb.classList.contains('open')&&b.classList.contains('on')){close();}
     else{open(app);}
   };});
   if(dismiss)dismiss.onclick=function(){tb.style.display='none';fitBodyPad();};
+  function toggleToolbar(){
+    if(tb.style.display==='none'){tb.style.display='';}
+    else{tb.style.display='none';close();deactivateInspect();if(pop)pop.hidden=true;clearOutline();}
+    positionStatus();fitBodyPad();
+  }
+  /* Keyboard shortcuts — this toolbar only exists in development builds, so
+     they are dev-only by construction. Shift+Alt rather than Ctrl+Shift to
+     stay clear of browser-reserved combos (Ctrl+Shift+D/I). Matched on e.code
+     so it works on non-QWERTY layouts too. */
+  (function(){
+    var keys={KeyD:toggleToolbar,KeyI:toggleInspect,KeyL:toggleLayout};
+    document.addEventListener('keydown',function(e){
+      if(!e.shiftKey||!e.altKey||e.ctrlKey||e.metaKey)return;
+      var fn=keys[e.code];if(!fn)return;
+      var t=e.target;
+      if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
+      e.preventDefault();
+      fn();
+    },true);
+  })();
+  // --- colour-scheme emulation (dev only: the site follows the OS) ---
+  // Cycles system -> dark -> light, remembered in the toolbar prefs. Setting
+  // data-theme on <html> pins color-scheme, so every light-dark() on the page —
+  // design tokens and code palette alike — follows. "system" removes it.
+  var themeBtn=document.getElementById('__epresso_tb_theme');
+  var THEME_MODES=['system','dark','light'];
+  var THEME_ICONS={system:'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.75 2.5A1.75 1.75 0 0 0 0 4.25v5.5c0 .966.784 1.75 1.75 1.75h4.5v1.5H4a.75.75 0 0 0 0 1.5h8a.75.75 0 0 0 0-1.5h-2.25v-1.5h4.5A1.75 1.75 0 0 0 16 9.75v-5.5A1.75 1.75 0 0 0 14.25 2.5H1.75Zm0 1.5h12.5a.25.25 0 0 1 .25.25v5.5a.25.25 0 0 1-.25.25H1.75a.25.25 0 0 1-.25-.25v-5.5a.25.25 0 0 1 .25-.25Z"/></svg>',dark:'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.598 1.591a.749.749 0 0 1 .785-.175 7.001 7.001 0 1 1-8.967 8.967.75.75 0 0 1 .961-.96 5.5 5.5 0 0 0 7.046-7.046.75.75 0 0 1 .175-.786Zm1.616 1.945a7 7 0 0 1-7.678 7.678 5.499 5.499 0 1 0 7.678-7.678Z"/></svg>',light:'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 12a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.657-8.157a.75.75 0 0 1 0 1.061l-1.061 1.06a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l1.06-1.06a.75.75 0 0 1 1.06 0Zm-9.193 9.193a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.061 0ZM8 0a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0V.75A.75.75 0 0 1 8 0ZM3 8a.75.75 0 0 1-.75.75H.75a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 3 8Zm13 0a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 16 8Zm-8 5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 13Zm3.536-1.464a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061l-1.061-1.06a.75.75 0 0 1 0-1.061ZM2.343 2.343a.75.75 0 0 1 1.061 0l1.06 1.061a.751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018l-1.06-1.06a.75.75 0 0 1 0-1.06Z"/></svg>'};
+  function themeMode(){return THEME_MODES.indexOf(prefs.theme)>0?prefs.theme:'system';}
+  function applyThemeMode(){
+    var mode=themeMode();
+    var root=document.documentElement;
+    if(mode==='system')root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme',mode);
+    if(themeBtn){
+      themeBtn.innerHTML=THEME_ICONS[mode];
+      themeBtn.title='Colour scheme: '+mode;
+      themeBtn.setAttribute('aria-label','Emulate colour scheme (now '+mode+')');
+      themeBtn.setAttribute('aria-pressed',mode==='system'?'false':'true');
+    }
+    vlog('theme mode',mode);
+  }
+  if(themeBtn){
+    themeBtn.onclick=function(){
+      prefs.theme=THEME_MODES[(THEME_MODES.indexOf(themeMode())+1)%THEME_MODES.length];
+      savePrefs();
+      applyThemeMode();
+      toastMsg('colour scheme: '+prefs.theme);
+    };
+    applyThemeMode();
+  }
   var editorSchemes={vscode:'vscode://file/',nvim:'nvim://file/'};
   function openEditor(file){var sc=editorSchemes[prefs.editor]||editorSchemes.vscode;if(file)location.href=sc+file;}
   document.addEventListener('click',function(e){var a=e.target&&e.target.closest?e.target.closest('.tb-editor'):null;if(a&&!e.defaultPrevented){e.preventDefault();openEditor(a.getAttribute('data-file'));}},true);
@@ -206,6 +275,138 @@ html{scroll-padding-bottom:64px}
   document.addEventListener('mouseout',function(e){if(mode&&e.target===last){e.target.classList.remove('ep-inspect-link');last=null;}},true);
   document.addEventListener('click',function(e){if(mode&&!inTb(e.target)){e.stopPropagation();var a=e.target.closest?e.target.closest('a'):null;if(a)e.preventDefault();showInfo(e.target);deactivateInspect();}},true);
   if(closeBtn)closeBtn.onclick=function(){pop.hidden=true;clearOutline();};
+  // --- layout: colour-coded rectangles over each component, click to drill in ---
+  // Rendered size only (getBoundingClientRect) — no build-time data needed, since
+  // `map` (hash -> source file) is already here for the inspector above.
+  var layoutRoot=null,layoutStack=[],layoutChildren=[];
+  var EDIT_ICON='<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445a6.03 6.03 0 0 1-1.68.441l-1.026.146a.75.75 0 0 1-.863-.863l.146-1.026c.055-.34.207-.677.441-1.68a1.75 1.75 0 0 1 .445-.755l8.61-8.61Z"/></svg>';
+  function scopeOf(el){
+    var atts=el.attributes||[];
+    for(var i=0;i<atts.length;i++){
+      var a=atts[i].name;
+      if(a.indexOf('data-epresso-')===0){var hh=a.slice('data-epresso-'.length);if(map[hh])return {hash:hh,file:map[hh]};}
+    }
+    return null;
+  }
+  /* The topmost component boundary under `root` that isn't `root` itself: walk
+     down, and the moment an element carries a *different* component's scope,
+     record it and stop descending — its own children are the next drill-in
+     level, not this one. Elements still carrying `ownHash` (root's own markup)
+     are transparent and get walked through. */
+  function directChildComponents(root,ownHash){
+    var out=[];
+    (function walk(el){
+      var kids=el.children;
+      for(var i=0;i<kids.length;i++){
+        var c=kids[i],s=scopeOf(c);
+        if(s&&s.hash!==ownHash)out.push({hash:s.hash,file:s.file,el:c});
+        else walk(c);
+      }
+    })(root);
+    return out;
+  }
+  function hueFor(file){var hh=0;for(var i=0;i<file.length;i++)hh=(hh*31+file.charCodeAt(i))>>>0;return hh%360;}
+  function fileName(file){return file.slice(file.lastIndexOf('/')+1).replace(/\.ep$/,'');}
+  function ensureLayoutRoot(){
+    if(layoutRoot)return layoutRoot;
+    layoutRoot=document.createElement('div');
+    layoutRoot.id='__epresso_tb_layout';
+    document.body.appendChild(layoutRoot);
+    /* Same info pill the inspector uses (#__epresso_tb_pop): hover a box, see
+       its name/size + the same "open in editor" button, no per-box markup. */
+    layoutRoot.addEventListener('mouseover',function(e){
+      var box=e.target.closest?e.target.closest('.tb-lbox'):null;
+      if(!box)return;
+      showLayoutInfo(box);
+    });
+    layoutRoot.addEventListener('mouseout',function(e){
+      var box=e.target.closest?e.target.closest('.tb-lbox'):null;
+      if(box&&(!e.relatedTarget||!box.contains(e.relatedTarget)))pop.hidden=true;
+    });
+    layoutRoot.addEventListener('click',function(e){
+      var box=e.target.closest?e.target.closest('.tb-lbox'):null;
+      if(!box)return;
+      if(box.classList.contains('tb-lbox-bg')){layoutStack.pop();renderLayout();return;}
+      var idx=+box.getAttribute('data-i');
+      if(layoutChildren[idx]){layoutStack.push(layoutChildren[idx]);renderLayout();}
+    });
+    return layoutRoot;
+  }
+  /* Breadcrumb trail lives in the same notification pill as everything else
+     (#__epresso_tb_toast) instead of its own fixed bar — no bar to overlap the
+     boxes underneath it, and it disappears the same way any other toast does. */
+  function editBtn(file,name){
+    return file?(' <button type="button" class="tb-editor tb-lc-edit" data-file="'+esc(file)+'" title="Edit '+esc(name)+'" aria-label="Edit '+esc(name)+'">'+EDIT_ICON+'</button>'):'';
+  }
+  function renderLayoutCrumb(){
+    var parts=['<button type="button" class="tb-lcrumb" data-i="-1">page</button>'+editBtn(pageFile,'page')];
+    layoutStack.forEach(function(s,i){
+      var name=fileName(s.file);
+      parts.push('<span class="tb-lsep">/</span><button type="button" class="tb-lcrumb" data-i="'+i+'">'+esc(name)+'</button>'+editBtn(s.file,name));
+    });
+    clearTimeout(toastTimer);
+    toast.innerHTML=parts.join('');
+    toast.className='tb-toast tb-toast-layout';
+    toast.style.display='flex';
+  }
+  toast.addEventListener('click',function(e){
+    if(!layoutMode)return;
+    var crumb=e.target.closest?e.target.closest('.tb-lcrumb'):null;
+    if(crumb){layoutStack.length=+crumb.getAttribute('data-i')+1;renderLayout();}
+  });
+  function showLayoutInfo(box){
+    var file=box.getAttribute('data-file'),name=box.getAttribute('data-name'),size=box.getAttribute('data-size');
+    if(openBtn){if(file){openBtn.setAttribute('data-file',file);openBtn.style.display='';}else{openBtn.style.display='none';}}
+    if(infoEl)infoEl.innerHTML='<code>'+esc(name)+'</code> <span class="tb-comp">'+esc(size)+'</span>';
+    pop.hidden=false;
+  }
+  function layoutBoxHtml(item,idx,isBg){
+    var r=item.el.getBoundingClientRect();
+    /* Some elements (e.g. a skip-link parked at top:-100% until focused) have
+       real dimensions but sit entirely off-screen — nothing to draw a box over. */
+    if(r.width<=0||r.height<=0||r.bottom<=0||r.right<=0||r.top>=innerHeight||r.left>=innerWidth)return '';
+    var hue=hueFor(item.file),name=fileName(item.file);
+    var size=Math.round(r.width)+'\u00d7'+Math.round(r.height);
+    var style='position:fixed;left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:'+r.height+'px;'+
+      'background:hsl('+hue+',60%,'+(isBg?'22%':'32%')+');border:1px solid hsl('+hue+',70%,60%);z-index:'+(isBg?1:2)+';';
+    return '<div class="tb-lbox'+(isBg?' tb-lbox-bg':'')+'" data-i="'+idx+'" data-file="'+esc(item.file)+'" data-name="'+esc(name)+'" data-size="'+size+'" style="'+style+'"></div>';
+  }
+  function renderLayout(){
+    var root=ensureLayoutRoot();
+    pop.hidden=true;   // the hovered box (if any) no longer exists post-render
+    var current=layoutStack.length?layoutStack[layoutStack.length-1]:null;
+    var rootEl=current?current.el:document.body,ownHash=current?current.hash:null;
+    renderLayoutCrumb();
+    var html='';
+    if(current)html+=layoutBoxHtml(current,-1,true);
+    layoutChildren=directChildComponents(rootEl,ownHash);
+    layoutChildren.forEach(function(item,i){html+=layoutBoxHtml(item,i,false);});
+    root.innerHTML=html;
+  }
+  function deactivateLayout(){
+    layoutMode=false;var lb=layoutBtn();if(lb)lb.classList.remove('on');
+    if(layoutRoot){layoutRoot.remove();layoutRoot=null;}
+    layoutStack=[];
+    pop.hidden=true;
+    clearTimeout(toastTimer);
+    toast.style.display='none';
+    toast.className='tb-toast';
+    toast.innerHTML='';
+    document.documentElement.style.overflow='';
+  }
+  function toggleLayout(){
+    var lb=layoutBtn();
+    if(layoutMode){deactivateLayout();}
+    else{
+      layoutMode=true;if(lb)lb.classList.add('on');close();deactivateInspect();
+      /* Boxes are positioned from getBoundingClientRect() once per render; lock
+         scroll while the view is open rather than recomputing continuously. */
+      document.documentElement.style.overflow='hidden';
+      renderLayout();
+    }
+  }
+  window.addEventListener('resize',function(){if(layoutMode)renderLayout();});
+  document.addEventListener('keydown',function(e){if(layoutMode&&e.key==='Escape')toggleLayout();});
   // --- audit ---
   function issues(){
     var out=[];

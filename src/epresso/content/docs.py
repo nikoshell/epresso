@@ -83,10 +83,14 @@ def _read_docs(base: Path, pattern: str, docs_dir: str) -> dict[str, dict]:
             if is_hub
             else stem.replace("-", " ").title()
         )
-        if not _has_content(strip_first_h1(body)):
-            continue
         if doc_id in docs:  # collision (e.g. a hub + a same-named leaf) -> full path
             doc_id = rel.with_suffix("").as_posix()
+        body_stripped = strip_first_h1(body)
+        has_page = _has_content(body_stripped)
+        # A hub with no body is a category label only (no page generated); any
+        # other empty file is ignored entirely.
+        if not has_page and not is_hub:
+            continue
         docs[doc_id] = {
             "id": doc_id,
             "file": path,
@@ -102,7 +106,8 @@ def _read_docs(base: Path, pattern: str, docs_dir: str) -> dict[str, dict]:
             "source": f"{docs_dir}/{rel.as_posix()}" if docs_dir else str(rel),
             "group_path": parts,
             "is_hub": is_hub,
-            "body": strip_first_h1(body),
+            "has_page": has_page,
+            "body": body_stripped,
         }
     _flatten_lone_hubs(docs)
     return docs
@@ -123,15 +128,11 @@ def _flatten_lone_hubs(docs: dict[str, dict]) -> None:
 def _order(docs: dict[str, dict]) -> list[dict]:
     """Order docs by directory hierarchy, respecting curated frontmatter order.
 
-    Within a directory: the hub (``index.md``/``README.md``) leads, then pages by
-    their authored ``order`` (default 1000) then title. A directory is placed by
-    the ``order`` of its hub (a category without an index hub defaults to 1000,
-    i.e. sorts after curated categories). Assigns the global ``order`` and
+    Within a directory, pages and subdirectories are interleaved by their
+    authored ``order`` (default 1000): a directory is placed by its hub's order,
+    a page by its own, hub pages lead ties. Assigns the global ``order`` and
     ``group`` used by the sidebar nav and prev/next chain.
     """
-    def sort_docs(ids: list[str]) -> list[str]:
-        return sorted(ids, key=lambda i: (0 if docs[i]["is_hub"] else 1, docs[i]["order"], docs[i]["title"].lower()))
-
     root: dict = {}
     for doc_id, d in docs.items():
         node = root
@@ -144,10 +145,18 @@ def _order(docs: dict[str, dict]) -> list[dict]:
     ordered: list[str] = []
 
     def walk(node: dict) -> None:
-        dirs = node.get("dirs", {})
-        for name in sorted(dirs, key=lambda n: (dirs[n].get("hub_order", DEFAULT_ORDER), n)):
-            walk(dirs[name])
-        ordered.extend(sort_docs(node.get("docs", [])))
+        # Interleave this directory's pages and subdirectories by authored order.
+        entries: list[tuple] = []
+        for name, child in node.get("dirs", {}).items():
+            entries.append((child.get("hub_order", DEFAULT_ORDER), 0, name, ("dir", child)))
+        for i in node.get("docs", []):
+            d = docs[i]
+            entries.append((d["order"], 0 if d["is_hub"] else 1, d["title"].lower(), ("doc", i)))
+        for _o, _k, _tie, payload in sorted(entries, key=lambda e: e[:3]):
+            if payload[0] == "dir":
+                walk(payload[1])
+            else:
+                ordered.append(payload[1])
 
     walk(root)
     if "" in ordered:  # the root overview (homepage) leads the chain.
@@ -177,7 +186,7 @@ class DocsLoader(LoaderObject):
             return
         docs = _read_docs(self.base, self.pattern, self.docs_dir)
         ordered = _order(docs)
-        chain = [d for d in ordered if d["id"] != ""]
+        chain = [d for d in ordered if d["id"] != "" and d.get("has_page", True)]
         n = len(chain)
         index = {d["id"]: i for i, d in enumerate(chain)}
         for doc in ordered:
@@ -189,7 +198,7 @@ class DocsLoader(LoaderObject):
             }
             data = collection.schema.model_validate(authored) if collection.schema else authored
             prev = nxt = None
-            if doc["id"] != "" and n > 1:
+            if doc["id"] != "" and doc.get("has_page", True) and n > 1:
                 i = index[doc["id"]]
                 prev = chain[i - 1]
                 nxt = chain[(i + 1) % n]
@@ -197,6 +206,7 @@ class DocsLoader(LoaderObject):
                 "group": doc["group"],
                 "group_path": doc["group_path"],
                 "is_hub": doc["is_hub"],
+                "has_page": doc.get("has_page", True),
                 "order": doc["order"],
                 "source": doc["source"],
                 "headings": headings(_MD, doc["body"]),

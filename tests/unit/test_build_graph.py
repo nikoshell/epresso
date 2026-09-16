@@ -74,7 +74,7 @@ def test_can_skip_is_false_until_manifest_is_usable(site):
 def test_code_hash_excludes_markdown_and_changes_on_template_edit(site):
     h1 = site.graph.hash_code(site.config)
     # a template edit changes the code hash
-    p = site.config.root / "templates/layouts/base.html"
+    p = site.config.root / "layouts" / "Base.ep"
     p.write_text(p.read_text(encoding="utf-8") + "<!-- edit -->\n", encoding="utf-8")
     h2 = site.graph.hash_code(site.config)
     assert h1 != h2

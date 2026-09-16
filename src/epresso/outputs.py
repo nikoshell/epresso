@@ -52,6 +52,96 @@ def write_robots(site: Any, out_dir: Path) -> None:
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _route_title_description(route: Any) -> tuple[str, str]:
+    """Best-effort ``(title, description)`` for a page route."""
+    data = getattr(route, "data", None)
+    # Content entries wrap the front-matter model in ``.data``.
+    if data is not None and not isinstance(data, dict) and hasattr(data, "data"):
+        data = data.data
+
+    def _get(obj: Any, key: str) -> str:
+        value = obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+        return " ".join(str(value).split()) if value else ""
+
+    title = _get(data, "title")
+    description = _get(data, "description") or _get(data, "summary")
+    fm = getattr(route, "frontmatter", None)
+    if isinstance(fm, dict):
+        title = title or _get(fm, "title")
+        description = description or _get(fm, "description") or _get(fm, "summary")
+    # Direct Markdown pages keep their front-matter on disk.
+    source = getattr(route, "source", None)
+    if not title and source is not None and source.suffix.lower() == ".md":
+        try:
+            from .document import parse_document
+
+            md = parse_document(source.read_text(encoding="utf-8"), "markdown").data or {}
+            title = _get(md, "title")
+            description = description or _get(md, "description") or _get(md, "summary")
+        except OSError:
+            pass
+    return title, description
+
+
+def _section_title(segment: str) -> str:
+    return segment.replace("-", " ").replace("_", " ").strip().title()
+
+
+def write_llms(site: Any, out_dir: Path, routes: list[Any]) -> None:
+    """Generate ``llms.txt`` (https://llmstxt.org/) from page routes.
+
+    An H1 site title and blockquote summary, then one bullet per page grouped by
+    its top-level path segment. Skipped when the user has provided their own.
+    """
+    cfg = site.config.seo.llms
+    if not cfg.enabled:
+        return
+    out = out_dir / cfg.path.lstrip("/")
+    if out.exists():
+        return  # user provided their own
+    title = cfg.title or site.config.site.name or "Site"
+    description = " ".join((cfg.description or site.config.site.description or "").split())
+    base = _site_url(site)
+
+    pages = [
+        r
+        for r in routes
+        if _is_html_page(r.path) and not r.path.startswith("/404") and not r.redirect_to
+    ]
+
+    def _line(route: Any) -> str:
+        r_title, r_desc = _route_title_description(route)
+        if not r_title:
+            leaf = route.path.strip("/").split("/")[-1]
+            r_title = _section_title(leaf) if leaf else "Home"
+        label = r_title.replace("[", "\\[").replace("]", "\\]")
+        text = f"- [{label}]({base + route.path})"
+        if r_desc:
+            text += f": {r_desc}"
+        return text
+
+    root: list[Any] = []
+    groups: dict[str, list[Any]] = {}
+    for r in pages:
+        seg = r.path.strip("/").split("/")[0] if r.path != "/" else ""
+        (root if not seg else groups.setdefault(seg, [])).append(r)
+
+    lines = [f"# {title}", ""]
+    if description:
+        lines += [f"> {description}", ""]
+    if root:
+        lines += [_line(r) for r in root]
+        lines.append("")
+    for seg, group in groups.items():
+        lines += [f"## {_section_title(seg)}", ""]
+        lines += [_line(r) for r in group]
+        lines.append("")
+    while lines and lines[-1] == "":
+        lines.pop()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def write_404(site: Any, out_dir: Path, routes: list[Any]) -> None:
     if (out_dir / "404.html").exists():
         return

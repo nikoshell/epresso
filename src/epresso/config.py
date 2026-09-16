@@ -28,7 +28,6 @@ class BuildConfig(BaseModel):
     output: str = "dist"
     content: str = "content"
     pages: str = "pages"
-    templates: str = "templates"  # back-compat: legacy templates root (components/layouts subdirs)
     layouts: str = "layouts"  # default layout dir (top-level)
     components: str = "components"  # default component dir (top-level)
     styles: str = "styles"  # default global stylesheet dir
@@ -112,9 +111,19 @@ class RssConfig(BaseModel):
     url_template: str = "/{collection}/{id}/"
 
 
+class LlmsConfig(BaseModel):
+    """The ``llms.txt`` file (https://llmstxt.org/) generated from page routes."""
+
+    enabled: bool = True
+    path: str = "/llms.txt"
+    title: str = ""  # defaults to the site name
+    description: str = ""  # defaults to the site description
+
+
 class SeoConfig(BaseModel):
     sitemap: bool = True
     robots: bool = True
+    llms: LlmsConfig = Field(default_factory=LlmsConfig)
     rss: RssConfig = Field(default_factory=RssConfig)
 
 
@@ -134,6 +143,49 @@ class DevConfig(BaseModel):
     toolbar: DevToolbar = Field(default_factory=DevToolbar)
 
 
+class LayersConfig(BaseModel):
+    """External component/layout roots, layered under the site's own.
+
+    Each entry is one of:
+
+    * a **directory path** — ``./vendor/components``, ``path:./vendor/lib``;
+    * a **Python package** that ships ``components/`` / ``layouts/`` —
+      ``pkg:epresso_ui`` (installed, importable);
+    * a **git repo** — ``github:owner/repo@v1``, ``git+https://…@main``.
+      GitHub repos are fetched as a tarball; other URLs are shallow-cloned.
+      Both land in ``.cache/layers/`` and are reused on later builds.
+
+    The site's own ``components/`` and ``layouts/`` are always searched first,
+    then layers in declaration order.
+    """
+
+    use: list[str] = Field(default_factory=list)
+
+
+class DocsSection(BaseModel):
+    """A docs section built into the site's output under ``base``.
+
+    Declarative equivalent of ``EPRESSO_BASE=/docs/ epresso docs --out dist/docs <source>``.
+    Use ``[docs]`` for one section or ``[[docs]]`` for several.
+    """
+
+    source: str = "docs"  # Markdown dir (or a project dir with its own site.toml)
+    base: str = "/docs/"  # public sub-path within the site
+    theme: str = ""  # theme project for bare Markdown (default: bundled docs theme)
+    out: str = ""  # output subdir of dist/ (default: derived from base)
+
+    @field_validator("base")
+    @classmethod
+    def _norm_base(cls, v: str) -> str:
+        v = (v or "/docs/").strip()
+        return "/" + v.strip("/") + "/"
+
+    @field_validator("out")
+    @classmethod
+    def _norm_out(cls, v: str) -> str:
+        return (v or "").strip().strip("/")
+
+
 class Config(BaseModel):
     site: SiteConfig = Field(default_factory=SiteConfig)
     build: BuildConfig = Field(default_factory=BuildConfig)
@@ -143,8 +195,10 @@ class Config(BaseModel):
     seo: SeoConfig = Field(default_factory=SeoConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     dev: DevConfig = Field(default_factory=DevConfig)
+    docs: list[DocsSection] = Field(default_factory=list)
     redirects: list[dict[str, str | dict]] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)  # dotted paths, e.g. "mypkg:MyPlugin"
+    layers: LayersConfig = Field(default_factory=LayersConfig)  # extra component/layout roots
     # Opaque theme configuration. Core only carries this through; themes read
     # and interpret it (e.g. ``[theme] sidebar = "tree"``). Core stays agnostic.
     theme: dict[str, Any] = Field(default_factory=dict)
@@ -152,6 +206,14 @@ class Config(BaseModel):
 
     # --- file locations -------------------------------------------------
     root: Path = Field(default_factory=lambda: Path.cwd())
+
+    @field_validator("docs", mode="before")
+    @classmethod
+    def _docs(cls, v: Any) -> Any:
+        """Accept a single ``[docs]`` table or an array ``[[docs]]``."""
+        if v is None:
+            return []
+        return [v] if isinstance(v, dict) else v
 
     @field_validator("redirects")
     @classmethod
@@ -169,26 +231,35 @@ class Config(BaseModel):
                 )
         return v
 
+    def source_root(self) -> Path:
+        """Directory that source dirs are resolved against.
+
+        Astro/Nuxt-style: when a top-level ``src/`` directory exists, pages,
+        components, layouts, content, styles and assets live inside
+        it. ``public/`` (``dir_static``), ``dist/`` (``dir_output``), ``.cache/``
+        and project config (``site.toml``, ``content.config.py``) stay at the
+        project root either way.
+        """
+        src = self.root / "src"
+        return src if src.is_dir() else self.root
+
     def dir_content(self) -> Path:
-        return self.root / self.build.content
+        return self.source_root() / self.build.content
 
     def dir_pages(self) -> Path:
-        return self.root / self.build.pages
-
-    def dir_templates(self) -> Path:
-        return self.root / self.build.templates
+        return self.source_root() / self.build.pages
 
     def dir_layouts(self) -> Path:
-        return self.root / self.build.layouts
+        return self.source_root() / self.build.layouts
 
     def dir_components(self) -> Path:
-        return self.root / self.build.components
+        return self.source_root() / self.build.components
 
     def dir_styles(self) -> Path:
-        return self.root / self.build.styles
+        return self.source_root() / self.build.styles
 
     def dir_assets(self) -> Path:
-        return self.root / self.build.assets
+        return self.source_root() / self.build.assets
 
     def dir_static(self) -> Path:
         return self.root / self.build.static
@@ -199,22 +270,6 @@ class Config(BaseModel):
     def cache_dir(self) -> Path:
         """Incremental cache location (gitignored; NOT cleaned by a clean build)."""
         return self.root / ".cache"
-
-
-DEFAULTS = {
-    "site": {"name": "My Site", "url": "http://localhost:8000", "language": "en"},
-    "build": {
-        "output": "dist",
-        "content": "content",
-        "pages": "pages",
-        "templates": "templates",
-        "layouts": "layouts",
-        "components": "components",
-        "styles": "styles",
-        "assets": "assets",
-        "trailing_slash": "always",
-    },
-}
 
 
 def load_env_file(root: Path, env: str | None) -> dict[str, str]:
@@ -316,6 +371,3 @@ def load_config(root: Path | None = None, env: str | None = None) -> Config:
     return config
 
 
-def dump_defaults() -> dict[str, Any]:
-    """Return the default config as plain dicts (used by ``epresso init``)."""
-    return DEFAULTS

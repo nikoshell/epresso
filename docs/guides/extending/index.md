@@ -1,8 +1,5 @@
 ---
 title: Extending epresso
 order: 30
-description: Plugins and middleware.
+description: Plugins, layers and middleware.
 ---
-# Extending epresso
-
-Plugins and middleware.

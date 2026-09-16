@@ -19,12 +19,24 @@ formatter.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from .errors import ContentError
 
-__all__ = ["Document", "parse_document", "split_frontmatter", "strip_frontmatter"]
+__all__ = [
+    "Document",
+    "SidecarBlocks",
+    "line_at",
+    "parse_document",
+    "split_frontmatter",
+    "strip_frontmatter",
+]
+
+
+def line_at(text: str, pos: int) -> int:
+    """1-based line number of ``pos`` in ``text``."""
+    return text.count("\n", 0, pos) + 1
 
 # Opening ``--- <spaces>\n`` … closing ``^--- <spaces>\n?`` (line-start). The
 # line-start ``^`` (MULTILINE) handles both a non-empty block (``title: x\n---``)
@@ -82,26 +94,37 @@ def _decode_yaml(frontmatter: str) -> dict:
     return data
 
 
-def _extract_blocks(body: str) -> tuple[str, str, str, str]:
-    """Split a ``.ep`` body into ``(body, scoped_css, scripts, global_css)``.
+def _extract_blocks(body: str) -> tuple[str, str, str, str, SidecarBlocks]:
+    """Split a ``.ep`` body into ``(body, scoped_css, scripts, global_css, sidecars)``.
 
     ``<style is:global>`` / ``<style global>`` blocks are global; other
     ``<style>`` blocks are scoped by default. ``<script>`` blocks are extracted
     and bundled, except ``<script is:inline>`` which stays in the body. All
     extracted style/script blocks are removed from the body.
+
+    ``sidecars`` records the line of every block (grouped by kind) so the
+    .ep file-shape rule can cap them without re-parsing the source.
     """
-    style_blocks = _STYLE_RE.findall(body)
-    body = _STYLE_RE.sub("", body)
     scoped: list[str] = []
     global_: list[str] = []
-    for attrs, content in style_blocks:
+    scoped_lines: list[int] = []
+    global_lines: list[int] = []
+    for m in _STYLE_RE.finditer(body):
+        attrs, content = m.group(1), m.group(2)
+        line = line_at(body, m.start())
         if re.search(r"\bis:global\b", attrs) or re.search(r"\bglobal\b", attrs):
             global_.append(content)
+            global_lines.append(line)
         else:
             scoped.append(content)
-    scripts = []
+            scoped_lines.append(line)
+    body = _STYLE_RE.sub("", body)
+
+    scripts: list[str] = []
     # scripts: extract all except <script is:inline> (which stays in the body so
     # it can run in the <head> before first paint — e.g. the theme pre-paint).
+    # Counted before the substitution so inline blocks count as sidecars too.
+    script_lines = [line_at(body, m.start()) for m in _SCRIPT_RE.finditer(body)]
 
     def _script_repl(m):
         attrs, content = m.group(1), m.group(2)
@@ -111,7 +134,25 @@ def _extract_blocks(body: str) -> tuple[str, str, str, str]:
         return ""
 
     body = _SCRIPT_RE.sub(_script_repl, body)
-    return body, "\n".join(scoped), "\n".join(scripts), "\n".join(global_)
+    sidecars = SidecarBlocks(tuple(scoped_lines), tuple(global_lines), tuple(script_lines))
+    return body, "\n".join(scoped), "\n".join(scripts), "\n".join(global_), sidecars
+
+
+@dataclass(frozen=True)
+class SidecarBlocks:
+    """Line numbers of a ``.ep`` file's sidecar blocks, grouped by kind.
+
+    The .ep file-shape rule caps each kind at one (one scoped ``<style>``, one
+    ``<style is:global>``, one ``<script>``); recording the lines here keeps that
+    check out of the regex business.
+    """
+
+    scoped_styles: tuple[int, ...] = ()
+    global_styles: tuple[int, ...] = ()
+    scripts: tuple[int, ...] = ()
+
+    # NOTE: the line numbers are relative to ``Document.body`` (i.e. after the
+    # front-matter); add ``Document.line_offset`` for file-relative lines.
 
 
 @dataclass
@@ -133,6 +174,8 @@ class Document:
     scoped_css: str = ""  # concatenated non-global <style> blocks (.ep only)
     scripts: str = ""  # concatenated <script> bodies (.ep only)
     global_css: str = ""  # concatenated global <style> blocks (.ep only)
+    sidecars: SidecarBlocks = field(default_factory=SidecarBlocks)  # block lines (.ep only)
+    line_offset: int = 0  # lines the front-matter occupies; body line + this = file line
 
 
 def parse_document(source: str, kind: Literal["ep", "markdown"] = "markdown") -> Document:
@@ -143,8 +186,11 @@ def parse_document(source: str, kind: Literal["ep", "markdown"] = "markdown") ->
     """
     fm, body = split_frontmatter(source)
     doc = Document(kind=kind, frontmatter=fm or "", body=body)
+    # `body` is a suffix of `source`, so the prefix length gives how many lines
+    # the front-matter (and its delimiters) occupied — errors report file lines.
+    doc.line_offset = source[: len(source) - len(body)].count("\n")
     if kind == "markdown":
         doc.data = _decode_yaml(fm) if fm is not None else {}
     else:
-        doc.body, doc.scoped_css, doc.scripts, doc.global_css = _extract_blocks(body)
+        (doc.body, doc.scoped_css, doc.scripts, doc.global_css, doc.sidecars) = _extract_blocks(body)
     return doc

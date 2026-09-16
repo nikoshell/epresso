@@ -1,0 +1,89 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    title: str = ""
+    path: str = "/"
+---
+<!doctype html>
+<html lang="{{ site.config.site.language or 'en' }}">
+    <head>
+        {{ seo(title=props.title or site.config.site.name, path=props.path, image=site.config.site.url.rstrip('/') ~ '/epresso.png') }}
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+        <meta name="color-scheme" content="light dark">
+        <meta name="theme-color" content="#fafbfc" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#0f1117" media="(prefers-color-scheme: dark)">
+        <link rel="icon" href="/favicon.ico" sizes="any">
+        <link rel="icon" type="image/svg+xml" href="/epresso.svg">
+        <script is:inline>
+/* Publishes the page breakpoint state as attributes on <html>, so
+   components can branch on it with plain attribute selectors
+   (works everywhere, unlike @container style()). 768/1024/1280
+   are the layout breakpoints — keep them in sync with the
+   @container queries in the components (see global.css). */
+(function() {
+    var root = document.documentElement;
+    var mqNav = window.matchMedia("(max-width: 1024px)");
+    var mqToc = window.matchMedia("(min-width: 1280px)");
+
+    function sync() {
+        root.setAttribute("data-nav-mode", mqNav.matches ? "compact" : "full");
+        root.setAttribute("data-toc-mode", mqToc.matches ? "rail" : "bar");
+    }
+    sync();
+
+    function on(ml) {
+        if (ml.addEventListener) ml.addEventListener("change", sync);
+        else ml.addListener(sync);
+    }
+    on(mqNav);
+    on(mqToc);
+})();
+
+/* Crossing a breakpoint turns a drawer into (or out of) an
+   off-canvas panel; that transform change must not animate.
+   See `html.epresso-resizing` in global.css. */
+(function() {
+    var root = document.documentElement;
+    var timer;
+    window.addEventListener("resize", function() {
+        root.classList.add("epresso-resizing");
+        clearTimeout(timer);
+        timer = setTimeout(function() {
+            root.classList.remove("epresso-resizing");
+        }, 200);
+    });
+})();
+
+/* Only one overlay (search / menu / sidebar) open at a time: a panel
+   announces itself when it opens and every other panel closes. */
+window.epressoPanelOpened = function(name) {
+    document.dispatchEvent(new CustomEvent("epresso:panel-open", {
+        detail: name
+    }));
+};
+
+/* See `html:not(.epresso-ready)` in global.css: the closed drawers
+   must not animate into place when the stylesheet lands late. */
+window.addEventListener("load", function() {
+    requestAnimationFrame(function() {
+        document.documentElement.classList.add("epresso-ready");
+    });
+});
+</script>
+        <link rel="stylesheet" href="{{ asset('global.css') }}">
+        <slot name="head" />
+    </head>
+    <body>
+        <Header />
+
+        <slot />
+
+        <Footer />
+
+        <SearchOverlay />
+        <ShortcutsOverlay />
+        <ImageLightbox />
+    </body>
+</html>

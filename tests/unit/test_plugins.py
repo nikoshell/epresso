@@ -42,7 +42,7 @@ def test_factory_plugin_adds_template_global():
 
         return Plugin(name="greeter", hooks={"on_setup": on_setup})
 
-    site = _build({"pages/index.html": "<p>{{ greeting() }}</p>"}, greeter())
+    site = _build({"pages/index.ep": "---\n---\n<p>{{ greeting() }}</p>"}, greeter())
     assert "hello-from-plugin" in _out(site)
 
 
@@ -53,7 +53,7 @@ def test_subclass_style_collects_method_hooks():
         def on_setup(self, caps):
             caps.add_global("greeting", lambda: "subclass-hello")
 
-    site = _build({"pages/index.html": "{{ greeting() }}"}, Greeter())
+    site = _build({"pages/index.ep": "---\n---\n{{ greeting() }}"}, Greeter())
     assert "subclass-hello" in _out(site)
 
 
@@ -66,7 +66,7 @@ def test_priority_determines_run_order():
 
         return Plugin(name=name, priority=priority, hooks={"on_setup": on_setup})
 
-    _build({"pages/index.html": "x"}, mk("low", priority=0, tag="low"), mk("high", priority=10, tag="high"))
+    _build({"pages/index.ep": "---\n---\nx"}, mk("low", priority=0, tag="low"), mk("high", priority=10, tag="high"))
     assert order == ["low", "high"]
 
 
@@ -78,7 +78,7 @@ def test_later_higher_priority_filter_overrides_earlier():
         caps.add_filter("shout", lambda s: str(s).upper())
 
     site = _build(
-        {"pages/index.html": "{{ 'hi' | shout }}"},
+        {"pages/index.ep": "---\n---\n{{ 'hi' | shout }}"},
         Plugin(name="identity", priority=0, hooks={"on_setup": on_setup_low}),
         Plugin(name="shouter", priority=10, hooks={"on_setup": on_setup_high}),
     )
@@ -86,7 +86,7 @@ def test_later_higher_priority_filter_overrides_earlier():
 
 
 def test_duplicate_plugin_name_rejected():
-    root, site = _make({"pages/index.html": "x"})
+    root, site = _make({"pages/index.ep": "---\n---\nx"})
     site.plugins.register(Plugin(name="dup", hooks={}))
     try:
         site.plugins.register(Plugin(name="dup", hooks={}))
@@ -100,7 +100,7 @@ def test_disabled_plugin_skipped():
         caps.add_global("greeting", lambda: "SHOULD-NOT-APPEAR")
 
     site = _build(
-        {"pages/index.html": "{{ greeting() if greeting else 'none' }}"},
+        {"pages/index.ep": "---\n---\n{{ greeting() if greeting else 'none' }}"},
         Plugin(name="off", enabled=False, hooks={"on_setup": on_setup}),
     )
     assert "SHOULD-NOT-APPEAR" not in _out(site)
@@ -119,7 +119,7 @@ def test_html_transform_rewrites_rendered_page():
 
         caps.transform_html(transform)
 
-    site = _build({"pages/index.html": "<p>body</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
+    site = _build({"pages/index.ep": "---\n---\n<p>body</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
     assert "<!-- transformed -->" in _out(site)
     assert seen["path"] == "/"  # index route path
 
@@ -129,7 +129,7 @@ def test_inject_head_inserts_fragment():
         caps.inject_head('<meta name="x" content="1">')
 
     site = _build(
-        {"pages/index.html": "<html><head><title>t</title></head><body>hi</body></html>"},
+        {"pages/index.ep": "---\n---\n<html><head><title>t</title></head><body>hi</body></html>"},
         Plugin(name="meta", hooks={"on_setup": on_setup}),
     )
     out = _out(site)
@@ -143,7 +143,7 @@ def test_html_transform_disables_route_reuse_but_build_is_idempotent():
 
         caps.transform_html(transform)
 
-    site = _build({"pages/index.html": "<p>a</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
+    site = _build({"pages/index.ep": "---\n---\n<p>a</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
     site.build()  # second build must not double-apply (transforms reset each load)
     assert _out(site).count("<!-- t -->") == 1
 
@@ -156,7 +156,7 @@ def test_register_collection_before_load_populates_store():
         )
 
     site = _build(
-        {"pages/index.html": "{{ get_collection('teams') | length }} teams"},
+        {"pages/index.ep": "---\n---\n<span>{{ get_collection('teams') | length }} teams</span>"},
         Plugin(name="teams", hooks={"before_load": before_load}),
     )
     assert "1 teams" in _out(site)
@@ -167,7 +167,7 @@ def test_register_collection_wrong_phase_raises_capability_error():
     def on_setup(caps):
         caps.register_collection("teams", loader=lambda: [])
 
-    root, site = _make({"pages/index.html": "x"})
+    root, site = _make({"pages/index.ep": "---\n---\nx"})
     site.plugins.register(Plugin(name="bad", hooks={"on_setup": on_setup}))
     try:
         site.build()
@@ -181,7 +181,7 @@ def test_markdown_extension_registration_is_idempotent():
         caps.add_markdown_extension("markdown.extensions.extra")
 
     site = _build(
-        {"pages/index.html": "x"},
+        {"pages/index.ep": "---\n---\nx"},
         Plugin(name="md1", hooks={"before_load": before_load}),
         Plugin(name="md2", hooks={"before_load": before_load}),
     )
@@ -193,7 +193,7 @@ def test_plugin_error_wrapped_with_name():
     def on_setup(caps):
         raise ValueError("boom")
 
-    root, site = _make({"pages/index.html": "x"})
+    root, site = _make({"pages/index.ep": "---\n---\nx"})
     site.plugins.register(Plugin(name="exploder", hooks={"on_setup": on_setup}))
     try:
         site.build()
@@ -221,7 +221,7 @@ def test_project_plugins_py_hooks_run_in_order(tmp_path):
                 "    def on_setup(self, caps): calls.append('on_setup')\n"
                 "tracer = Tracer()\n"
             ),
-            "pages/index.html": "hi",
+            "pages/index.ep": "---\n---\nhi",
         }
     )
     assert len(site.plugins.plugins) == 1

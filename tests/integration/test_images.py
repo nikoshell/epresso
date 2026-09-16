@@ -38,11 +38,9 @@ def test_image_renders_srcset_and_builds_webp(tmp_path):
     root, site = _make(
         {
             "assets/photos/hero.png": _png(1200, 600),
-            "pages/index.html": (
-                "{% extends 'layouts/base.html' %}"
-                "{% block content %}{{ image('photos/hero.png', widths=[400,800,1200], alt='Hero') }}{% endblock %}"
+            "pages/index.ep": (
+                "---\n---\n{{ image('photos/hero.png', widths=[400,800,1200], alt='Hero') }}"
             ),
-            "templates/layouts/base.html": "<body>{% block content %}{% endblock %}</body>",
         }
     )
     site.build()
@@ -57,7 +55,7 @@ def test_image_renders_srcset_and_builds_webp(tmp_path):
 
 
 def test_image_fallback_when_source_missing(tmp_path):
-    root, site = _make({"pages/index.html": "x"})
+    root, site = _make({"pages/index.ep": "---\n---\nx"})
     tag = site.images.render("nope.jpg", alt="x")
     assert tag.startswith("<img")
 

@@ -1,0 +1,70 @@
+---
+from pydantic import BaseModel
+
+# Every icon used anywhere in components/, one entry each. "attrs" is the
+# <svg>'s own attributes (viewBox, fill/stroke) verbatim from wherever it used
+# to be pasted inline; "body" is its inner markup. Icon.ep only adds what
+# every icon needs generically: aria-hidden, and an optional width/height/class.
+ICONS = {
+    "search": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>',
+    },
+    "caret": {
+        # NavAccordion.ep builds its markup as a Python string, not template
+        # composition, so it keeps its own copy of this one; see the comment there.
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>',
+    },
+    "chevron-down": {
+        "attrs": 'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"',
+        "body": '<path d="m4 6 4 4 4-4"/>',
+    },
+    "close": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/>',
+    },
+    "menu": {
+        "attrs": 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"',
+        "body": '<path d="M3 6h18M3 12h18M3 18h18"/>',
+    },
+    "sidebar": {
+        "attrs": 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"',
+        "body": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>',
+    },
+    "github": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>',
+    },
+    "code-lines": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M9 4.75A.75.75 0 0 1 9.75 4h4a.75.75 0 0 1 .53 1.28l-1.89 1.892c.312.076.604.18.867.319.742.391 1.244 1.063 1.244 2.005 0 .653-.231 1.208-.629 1.627-.386.408-.894.653-1.408.777-1.01.243-2.225.063-3.124-.527a.751.751 0 0 1 .822-1.254c.534.35 1.32.474 1.951.322.306-.073.53-.201.67-.349.129-.136.218-.32.218-.596 0-.308-.123-.509-.444-.678-.373-.197-.98-.318-1.806-.318a.75.75 0 0 1-.53-1.28l1.72-1.72H9.75A.75.75 0 0 1 9 4.75Zm-3.587 5.763c-.35-.05-.77.113-.983.572a.75.75 0 1 1-1.36-.632c.508-1.094 1.589-1.565 2.558-1.425 1 .145 1.872.945 1.872 2.222 0 1.433-1.088 2.192-1.79 2.681-.308.216-.571.397-.772.573H7a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75c0-.69.3-1.211.67-1.61.348-.372.8-.676 1.15-.92.8-.56 1.18-.904 1.18-1.474 0-.473-.267-.69-.587-.737ZM5.604.089A.75.75 0 0 1 6 .75v4.77h.711a.75.75 0 0 1 0 1.5H3.759a.75.75 0 0 1 0-1.5H4.5V2.15l-.334.223a.75.75 0 0 1-.832-1.248l1.5-1a.75.75 0 0 1 .77-.037Z"/>',
+    },
+    "code-copy": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/>',
+    },
+    "code-check": {
+        "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
+        "body": '<path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/>',
+    },
+    "pa-copy": {
+        "attrs": 'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"',
+        "body": '<rect x="5.75" y="5.75" width="8.5" height="8.5" rx="1.5"/><path d="M3.75 10.25A1.5 1.5 0 0 1 2.25 8.75V3.75a1.5 1.5 0 0 1 1.5-1.5h5a1.5 1.5 0 0 1 1.5 1.5"/>',
+    },
+    "pa-check": {
+        "attrs": 'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"',
+        "body": '<path d="m3.5 8.5 3 3 6-7"/>',
+    },
+}
+
+
+class Props(BaseModel):
+    icon: str
+    class_name: str = ""
+    size: int = 0  # 0 = no width/height attribute; let the caller's CSS size it
+---
+
+<svg {{ ICONS[props.icon].attrs | safe }} aria-hidden="true"{% if props.size %} width="{{ props.size }}" height="{{ props.size }}"{% endif %}{% if props.class_name %} class="{{ props.class_name }}"{% endif %}>
+    {{ ICONS[props.icon].body | safe }}
+</svg>

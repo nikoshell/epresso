@@ -28,7 +28,7 @@ def _build_with(*plugins, page="<h1>{{ greeting() }}</h1>"):
 
     root = Path(tempfile.mkdtemp())
     (root / "pages").mkdir()
-    (root / "pages" / "index.html").write_text(page, encoding="utf-8")
+    (root / "pages" / "index.ep").write_text("---\n---\n" + page, encoding="utf-8")
     site = Site.load(root)
     for p in plugins:
         site.plugins.register(p)
@@ -53,7 +53,9 @@ def test_watermark_example_stamps_pre_blocks():
 def test_watermark_does_not_double_stamp_on_repeat():
     w = _load("watermark")
     plugin = w.watermark()
-    site, html = _build_with(plugin, page="<pre>one</pre>\n<pre>two</pre>")
+    site, html = _build_with(
+        plugin, page="<Fragment><pre>one</pre>\n<pre>two</pre></Fragment>"
+    )
     assert html.count("epresso-mark") == 2
     site.build()  # reload + rebuild must not add more stamps
     html2 = (site.config.dir_output() / "index.html").read_text(encoding="utf-8")
@@ -65,6 +67,7 @@ def test_quotes_example_registers_a_collection():
     items = [{"id": "a", "data": {"text": "stay deterministic"}}, {"id": "b", "data": {"text": "go incremental"}}]
     plugin = q.quotes(items)
     site, html = _build_with(
-        plugin, page="{% for q in get_collection('quotes') %}{{ q.data.text }};{% endfor %}"
+        plugin,
+        page="{% for q in get_collection('quotes') %}<span>{{ q.data.text }};</span>{% endfor %}",
     )
-    assert "stay deterministic;go incremental;" in html
+    assert "<span>stay deterministic;</span><span>go incremental;</span>" in html

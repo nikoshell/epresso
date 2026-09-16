@@ -39,3 +39,33 @@ def test_theme_config_is_opaque_passthrough(tmp_path):
 
 def test_theme_config_defaults_to_empty(tmp_path):
     assert load_config(tmp_path).theme == {}
+
+
+def test_source_dirs_are_top_level_without_src(tmp_path):
+    cfg = load_config(tmp_path)
+    assert cfg.source_root() == tmp_path
+    assert cfg.dir_pages() == tmp_path / "pages"
+    assert cfg.dir_layouts() == tmp_path / "layouts"
+    assert cfg.dir_components() == tmp_path / "components"
+    assert cfg.dir_content() == tmp_path / "content"
+    assert cfg.dir_styles() == tmp_path / "styles"
+    assert cfg.dir_assets() == tmp_path / "assets"
+    # root-anchored regardless
+    assert cfg.dir_static() == tmp_path / "public"
+    assert cfg.dir_output() == tmp_path / "dist"
+
+
+def test_src_dir_relocates_source_dirs(tmp_path):
+    (tmp_path / "src").mkdir()
+    cfg = load_config(tmp_path)
+    assert cfg.source_root() == tmp_path / "src"
+    assert cfg.dir_pages() == tmp_path / "src" / "pages"
+    assert cfg.dir_layouts() == tmp_path / "src" / "layouts"
+    assert cfg.dir_components() == tmp_path / "src" / "components"
+    assert cfg.dir_content() == tmp_path / "src" / "content"
+    assert cfg.dir_styles() == tmp_path / "src" / "styles"
+    assert cfg.dir_assets() == tmp_path / "src" / "assets"
+    # project root stays put: public/, dist/, .cache/ and config files
+    assert cfg.dir_static() == tmp_path / "public"
+    assert cfg.dir_output() == tmp_path / "dist"
+    assert cfg.cache_dir() == tmp_path / ".cache"

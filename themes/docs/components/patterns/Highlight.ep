@@ -15,83 +15,77 @@ class Props(BaseModel):
 </pre>
 
 <style>
-    .code-body {
-        font-family: var(--font-mono);
-        font-size: 0.88rem;
-        line-height: 1.6;
-        padding: var(--space-sm) 0;
-        overflow-x: auto;
-        counter-reset: line;
-    }
+.code-body {
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    padding: var(--space-sm) 0;
+    overflow-x: auto;
+    counter-reset: line;
+}
 
-    .code-line {
-        display: block;
-        white-space: pre;
-        counter-increment: line;
-        padding: 0 var(--space-md);
-        border-radius: var(--radius-sm);
-    }
+.code-line {
+    display: block;
+    white-space: pre;
+    counter-increment: line;
+    padding: 0 var(--space-md);
+    border-radius: var(--radius-sm);
+}
 
-    .code-body:not(.no-numbers) .code-line {
-        padding: 0;
-    }
+.code-body:not(.no-numbers) .code-line {
+    padding: 0;
+}
 
-    .code-line::before {
-        content: counter(line);
-        display: inline-block;
-        width: 2.2rem;
-        margin-right: var(--space-md);
-        text-align: right;
-        color: var(--muted);
-        opacity: 0.55;
-        font-size: 0.8em;
-        user-select: none;
-    }
+.code-line::before {
+    content: counter(line);
+    display: inline-block;
+    width: 2.2rem;
+    margin-right: var(--space-md);
+    text-align: right;
+    color: var(--muted);
+    opacity: 0.55;
+    font-size: 0.8em;
+    user-select: none;
+}
 
-    .code-body.no-numbers .code-line::before {
-        content: "";
-        width: 0;
-        margin-right: 0;
-    }
+.code-body.no-numbers .code-line::before {
+    content: "";
+    width: 0;
+    margin-right: 0;
+}
 
-    .code-line:hover {
-        background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
-    }
+.code-line:hover {
+    background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
 
-    .code-line.selected {
-        background: var(--accent-soft);
-    }
+.code-line.selected {
+    background: var(--accent-soft);
+}
 
-    .code-line.selected::before {
-        color: var(--accent);
-        opacity: 1;
-    }
+.code-line.selected::before {
+    color: var(--accent);
+    opacity: 1;
+}
 
-    .highlight {
-        position: relative;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow-sm);
-        overflow: hidden;
-        margin: 0 0 var(--space-md);
-        white-space: normal;
-    }
+.highlight {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin: 0 0 var(--space-md);
+    white-space: normal;
+}
+
+/* One stylesheet: every colour is light-dark(), so the code palette
+       follows color-scheme with the rest of the theme — no data-theme scoping
+       and nothing for a script to set. */
+{{ pygments_css_pair(epresso.pygments.EpressoThemeLight, epresso.pygments.EpressoThemeDark, '.highlight') }}
 </style>
 
 <style is:global>
-    .highlight.no-copy .code-copy {
-        display: none !important
-    }
-</style>
-
-<style>{{ pygments_css(epresso.pygments.EpressoThemeDark, ':global(html[data-theme="dark"]) .highlight') }}</style>
-
-<style>{{ pygments_css(epresso.pygments.EpressoThemeLight, ':global(html[data-theme="light"]) .highlight') }}</style>
-
-<style>
-    :global(html[data-theme="light"]) .highlight {
-        color: var(--ink);
-        background-color: #fff;
-    }
+.highlight.no-copy .code-copy {
+    display: none !important
+}
 </style>

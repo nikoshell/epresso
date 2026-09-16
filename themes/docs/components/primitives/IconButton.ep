@@ -9,8 +9,8 @@ class Props(BaseModel):
     aria_label: str = ""
     title: str = ""
     aria_haspopup: str = ""
-    href: str = ""  # when set, render an <a> (link) instead of a <button>
-    external: bool = False  # open href in a new tab (adds target + rel)
+    href: str = ""
+    external: bool = False
 ---
 
 {% if props.href %}
@@ -24,34 +24,25 @@ class Props(BaseModel):
 {% endif %}
 
 <style>
-    .icon-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.2rem;
-        height: 2.2rem;
-        border-radius: var(--radius-sm);
-        border: 1px solid transparent;
-        background: transparent;
-        color: var(--muted);
-        text-decoration: none;
-        cursor: pointer;
-        transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
-    }
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
 
-    .icon-btn:hover {
-        color: var(--ink);
-        background: var(--bg);
-        border-color: var(--line);
-        text-decoration: none;
-    }
-
-    .icon-btn--pill {
-        gap: var(--space-sm);
-        padding: 0 0.7rem;
-        width: auto;
-        border: 1px solid var(--line);
-        color: var(--muted);
-        font: 400 0.85rem/1 var(--font-body);
-    }
+.icon-btn:hover {
+    color: var(--ink);
+    background: var(--accent-soft);
+    border-color: var(--line);
+    text-decoration: none;
+}
 </style>

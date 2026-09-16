@@ -15,19 +15,19 @@ def test_parse_index_is_root():
 
 
 def test_parse_dynamic():
-    segments, params = parse_route(Path("blog/[slug].html"))
+    segments, params = parse_route(Path("blog/[slug].ep"))
     assert params == {"slug": None}
     assert _build_path(segments, {"slug": "hello"}, "always") == "/blog/hello/"
 
 
 def test_parse_spread():
-    segments, params = parse_route(Path("docs/[...path].html"))
+    segments, params = parse_route(Path("docs/[...path].ep"))
     assert params == {"path": None}
     assert _build_path(segments, {"path": ["a", "b"]}, "always") == "/docs/a/b/"
 
 
 def test_nested_dynamic():
-    segments, params = parse_route(Path("sponsor/[sponsor]/[job].html"))
+    segments, params = parse_route(Path("sponsor/[sponsor]/[job].ep"))
     assert set(params) == {"sponsor", "job"}
     assert _build_path(segments, {"sponsor": "acme", "job": "eng"}, "always") == "/sponsor/acme/eng/"
 
@@ -56,7 +56,7 @@ def test_output_path_dir_with_dot_in_name():
 
 
 def test_route_dataclass():
-    r = Route(path="/x/", template="x.html", params={"a": 1}, data={"k": "v"})
+    r = Route(path="/x/", params={"a": 1}, data={"k": "v"})
     assert r.content_type == "text/html"
     assert r.path == "/x/"
 
@@ -88,3 +88,17 @@ def test_discover_skips_underscore_prefix(tmp_path):
     assert "index.ep" in rels
     assert "blog/post.md" in rels
     assert not any(part.startswith("_") for r in rels for part in r.split("/"))
+
+
+def test_html_page_template_is_rejected(tmp_path):
+    from epresso.errors import RouteError
+    from epresso.routing import discover_route_patterns
+
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    (pages / "index.html").write_text("<p>x</p>")
+    try:
+        discover_route_patterns(pages)
+        raise AssertionError("expected RouteError")
+    except RouteError as e:
+        assert ".html page templates are not supported" in str(e)

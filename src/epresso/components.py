@@ -4,16 +4,15 @@
 component with the given kwargs plus ``content`` (the rendered body) and the
 curated globals.
 
-A component is resolved as ``templates/components/<Name>.ep`` first, then
-``templates/components/<Name>.html``.
+A component is resolved as ``<components>/<Name>.ep`` (``components/`` at the
+project root, or ``src/components/`` in a ``src/`` project), falling back to the
+``layouts/`` root so a layout can double as a component.
 
 ``.ep`` components are single files with a Python frontmatter (``--- … ---``)
 that may declare a strict Pydantic ``Props`` model and/or a ``props()`` helper,
 plus a Jinja body. Props are validated against the model, so no unvalidated
 kwargs reach the template. A ``<style>`` block in the body is extracted and
 scoped to the component's rendered output.
-
-``.html`` components are plain Jinja templates (backwards compatible).
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ from .errors import TemplateError
 # re-read/exec/compile the component. mtime makes it dev-safe.
 _COMPONENT_CACHE: dict[tuple[str, float, int], tuple[str, str, str, str, str, CodeType | None, Any]] = {}
 # Resolved-component cache: name -> (path, kind), keyed by (name, env id).
-_RESOLVE_CACHE: dict[tuple[str, int], tuple[Path, str] | None] = {}
+_RESOLVE_CACHE: dict[tuple[str, int], Path | None] = {}
 
 
 def _scope_hash(name: str) -> str:
@@ -77,7 +76,7 @@ def _current_author() -> str | None:
 
 
 
-def _resolve_component(env: Any, name: str) -> tuple[Path, str] | None:
+def _resolve_component(env: Any, name: str) -> Path | None:
     """Cached component resolution (scans are avoided on repeated renders)."""
     key = (name, id(env))
     hit = _RESOLVE_CACHE.get(key)
@@ -90,14 +89,21 @@ def _resolve_component(env: Any, name: str) -> tuple[Path, str] | None:
     return result
 
 
-def _resolve_component_uncached(env: Any, name: str) -> tuple[Path, str] | None:
-    """Return (path, kind) for a component, or None. kind in {'epresso','html'}.
+def _resolve_component_uncached(env: Any, name: str) -> Path | None:
+    """Return the ``.ep`` file for a component, or None.
 
-    Searches the top-level ``components/`` and ``layouts/`` dirs (the default
-    structure) plus the legacy ``templates/components`` + ``templates/layouts``
-    subdirs for back-compat.
+    Searches the top-level ``components/`` and ``layouts/`` dirs, plus
+    ``<components>`` / ``<layouts>`` under every extra loader root (layers).
     """
     from jinja2 import ChoiceLoader
+
+    # <Name:ns1:ns2 /> (see jsx.py) asks for one specific file deterministically
+    # -- <root>/ns1/ns2/Name.ep -- instead of the plain-basename lookup below,
+    # which is only well-defined when a basename is unique outside the
+    # components/layouts roots. Resolved first and separately: it never falls
+    # through to the ambiguous recursive scan.
+    if ":" in name:
+        return _resolve_namespaced_component(env, name)
 
     site = env.globals.get("site")
     comp_roots: list[Path] = []
@@ -125,33 +131,71 @@ def _resolve_component_uncached(env: Any, name: str) -> tuple[Path, str] | None:
     for root in comp_roots:
         if not root.exists():
             continue
-        for ext, kind in ((".ep", "epresso"), (".html", "html")):
-            p = root / f"{name}{ext}"
-            if p.is_file():
-                return p, kind
+        p = root / f"{name}.ep"
+        if p.is_file():
+            return p
     # 2) layouts/ roots (layout components, e.g. <BaseLayout>)
     for root in layout_roots:
         if not root.exists():
             continue
-        for ext, kind in ((".ep", "epresso"), (".html", "html")):
-            p = root / f"{name}{ext}"
-            if p.is_file():
-                return p, kind
+        p = root / f"{name}.ep"
+        if p.is_file():
+            return p
     # 3) fallback: md/ wrappers + recursive basename (components/ui/Button.ep)
     for root in comp_roots:
         md_p = root / "md" / f"{name}.ep"
         if md_p.is_file():
-            return md_p, "epresso"
+            return md_p
     for root in comp_roots:
         if not root.exists():
             continue
-        for kind, ext in (("epresso", ".ep"), ("html", ".html")):
-            try:
-                matches = [p for p in root.rglob(f"*{ext}") if p.stem == name]
-            except OSError:
-                continue
-            if matches:
-                return matches[0], kind
+        try:
+            matches = [p for p in root.rglob("*.ep") if p.stem == name]
+        except OSError:
+            continue
+        if matches:
+            return matches[0]
+    return None
+
+
+def _resolve_namespaced_component(env: Any, name: str) -> Path | None:
+    """Resolve ``Name:ns1:ns2`` to ``<components-root>/ns1/ns2/Name.ep``.
+
+    Only the components/ and layouts/ roots are checked (a direct-file lookup,
+    same as the unqualified fast path) -- there is nothing left to disambiguate
+    once a subdirectory is named explicitly.
+    """
+    from jinja2 import ChoiceLoader
+
+    base, *segments = name.split(":")
+    rel = "/".join([*segments, base])
+
+    site = env.globals.get("site")
+    roots: list[Path] = []
+    if site is not None:
+        roots.append(site.config.dir_components())
+        roots.append(site.config.dir_layouts())
+    loader = env.loader
+    searchpaths: list[Path] = []
+    if isinstance(loader, ChoiceLoader):
+        for sub in loader.loaders:
+            sp = getattr(sub, "searchpath", None)
+            if sp:
+                searchpaths.extend(Path(p) for p in sp)
+    elif loader is not None:
+        sp = getattr(loader, "searchpath", None)
+        if sp:
+            searchpaths.extend(Path(p) for p in sp)
+    for base_path in searchpaths:
+        roots.append(base_path / "components")
+        roots.append(base_path / "layouts")
+
+    for root in roots:
+        if not root.exists():
+            continue
+        p = root / f"{rel}.ep"
+        if p.is_file():
+            return p
     return None
 
 
@@ -181,39 +225,166 @@ def _find_fragment_close(text: str, start: int) -> tuple[int, int] | None:
     return None
 
 
+_TAG_OPEN = re.compile(r"<\s*([A-Za-z][-\w:]*)((?:\s[^>]*?)?)(/?)>", re.DOTALL)
+_TAG_CLOSE = re.compile(r"</\s*([A-Za-z][-\w:]*)\s*>")
+
+_VOID_TAGS = frozenset(
+    "area base br col embed hr img input link meta param source track wbr".split()
+)
+
+
+def _find_tag_close(text: str, tag: str, start: int) -> tuple[int, int] | None:
+    """Return ``(start, end)`` of the ``</tag>`` matching an open tag whose content
+    begins at ``start``, accounting for nested tags of the same name."""
+    depth = 1
+    i = start
+    name = re.escape(tag)
+    open_re = re.compile(r"<\s*" + name + r"\b", re.IGNORECASE)
+    close_re = re.compile(r"</\s*" + name + r"\s*>", re.IGNORECASE)
+    while i < len(text):
+        mo = open_re.search(text, i)
+        mc = close_re.search(text, i)
+        if mc is None:
+            return None
+        if mo is not None and mo.start() < mc.start():
+            depth += 1
+            i = mo.end()
+        else:
+            depth -= 1
+            if depth == 0:
+                return mc.start(), mc.end()
+            i = mc.end()
+    return None
+
+
+def _strip_slot_attr(tag: str) -> str:
+    """Remove the ``slot="…"`` marker from an opening tag."""
+    return re.sub(r'\s+slot\s*=\s*["\'][^"\']*["\']', "", tag, count=1)
+
+
+def unwrap_fragments(html: str) -> str:
+    """Drop ``<Fragment>``/``</Fragment>`` and ``<>``/``</>`` markers, keeping their
+    contents, so a template can group siblings without emitting a wrapper node."""
+    if "<" not in html:
+        return html
+    out: list[str] = []
+    i = 0
+    n = len(html)
+    while i < n:
+        lt = html.find("<", i)
+        if lt < 0:
+            out.append(html[i:])
+            break
+        out.append(html[i:lt])
+        if html.startswith("<>", lt):
+            i = lt + 2
+            continue
+        if html.startswith("</>", lt):
+            i = lt + 3
+            continue
+        if html.startswith("</", lt):
+            cm = _TAG_CLOSE.match(html, lt)
+            if cm is not None and cm.group(1).lower() == "fragment":
+                i = cm.end()
+                continue
+            out.append("<")
+            i = lt + 1
+            continue
+        m = _FRAGMENT_OPEN.match(html, lt)
+        if m is None:
+            out.append("<")
+            i = lt + 1
+            continue
+        if m.group(1).rstrip().endswith("/"):
+            i = m.end()
+            continue
+        close = _find_fragment_close(html, m.end())
+        if close is None:
+            i = m.end()
+            continue
+        out.append(html[m.end() : close[0]])
+        i = close[1]
+    return "".join(out)
+
+
 def _extract_slots(content: str) -> tuple[str, dict[str, str]]:
     """Split rendered children into a default slot (``content``) plus named slots.
 
-    Each ``<Fragment slot="name">…</Fragment>`` child contributes its inner HTML to
-    ``slots[name]`` and is removed from the default ``content`` — mirroring
-    named slots. ``<Fragment>`` blocks without a ``slot`` attribute are
-    left untouched.
+    Two ways to fill a slot:
+
+    * ``<Fragment slot="name">…</Fragment>`` — the wrapper renders nothing, so its
+      **inner HTML** becomes the slot value (the fragment is dropped from the
+      default ``content``).
+    * ``slot="name"`` on any element — the **whole element** becomes the slot value
+      (marker attribute stripped), so slotting needs no wrapper element.
+
+    ``<Fragment>`` without ``slot`` — and ``<>…</>`` — render nothing; they only group
+    siblings and are unwrapped.
     """
+    # Coerce: callers pass Markup sometimes, and `str + Markup` would escape the
+    # left operand via Markup.__radd__ (slots are re-wrapped at the call site).
+    content = str(content)
     slots: dict[str, str] = {}
     out: list[str] = []
     i = 0
     n = len(content)
     while i < n:
-        m = _FRAGMENT_OPEN.search(content, i)
-        if m is None:
+        lt = content.find("<", i)
+        if lt < 0:
             out.append(content[i:])
             break
-        sm = re.search(r'\bslot\s*=\s*["\']([^"\']+)["\']', m.group(1))
+        out.append(content[i:lt])
+        if content.startswith("<>", lt):
+            i = lt + 2
+            continue
+        if content.startswith("</>", lt):
+            i = lt + 3
+            continue
+        if content.startswith("</", lt):
+            cm = _TAG_CLOSE.match(content, lt)
+            if cm is not None and cm.group(1).lower() == "fragment":
+                i = cm.end()  # close of an unwrapped <Fragment>
+                continue
+            out.append("<")
+            i = lt + 1
+            continue
+        m = _TAG_OPEN.match(content, lt)
+        if m is None:
+            out.append("<")
+            i = lt + 1
+            continue
+        tag = m.group(1)
+        attrs = m.group(2) or ""
+        sm = re.search(r'\bslot\s*=\s*["\']([^"\']+)["\']', attrs)
+        if tag.lower() == "fragment":
+            if sm is None:
+                i = m.end()  # zero-output group: drop the marker
+                continue
+            close = _find_fragment_close(content, m.end())
+            if close is None:
+                out.append(m.group(0))
+                i = m.end()
+                continue
+            slots[sm.group(1)] = content[m.end() : close[0]]
+            i = close[1]
+            continue
         if sm is None:
-            out.append(content[i : m.end()])
+            out.append(m.group(0))
             i = m.end()
             continue
-        close = _find_fragment_close(content, m.end())
+        # Void only for real (lowercase) HTML elements: component tags are
+        # Capitalized, so <Base>/<Link>/<Source> must not look like <base>/<link>.
+        if m.group(3) == "/" or (tag.islower() and tag in _VOID_TAGS):
+            slots[sm.group(1)] = _strip_slot_attr(m.group(0))
+            i = m.end()
+            continue
+        close = _find_tag_close(content, tag, m.end())
         if close is None:
-            out.append(content[i : m.end()])
+            out.append(m.group(0))
             i = m.end()
             continue
-        cstart, cend = close
-        slots[sm.group(1)] = content[m.end() : cstart]
-        # keep the default content *before* this named-slot fragment (drop the
-        # fragment itself), so text interleaved between fragments is preserved.
-        out.append(content[i : m.start()])
-        i = cend
+        slots[sm.group(1)] = _strip_slot_attr(m.group(0)) + content[m.end() : close[1]]
+        i = close[1]
     return "".join(out), slots
 
 
@@ -274,10 +445,11 @@ def _parse_component(path: Path, environment: Any):
     if hit is not None:
         return hit
     from .document import parse_document
-    from .enforce import ensure_components
+    from .enforce import ensure_components, ensure_ep_structure
 
     doc = parse_document(path.read_text(encoding="utf-8"), "ep")
     ensure_components(doc.body, label=str(path))
+    ensure_ep_structure(doc, label=str(path))
     frontmatter, body, scoped_css, scripts, global_css = (
         doc.frontmatter,
         doc.body,
@@ -288,7 +460,13 @@ def _parse_component(path: Path, environment: Any):
     fm_code = None
     if frontmatter.strip():
         try:
-            fm_code = compile(frontmatter, str(path), "exec")
+            # ``dont_inherit=True``: this module has ``from __future__ import
+            # annotations``, and without the flag that future is inherited by the
+            # compiled frontmatter — turning every annotation in a user's ``Props``
+            # model into a string pydantic cannot resolve (there is no real module
+            # behind an exec'd namespace, so anything but a builtin fails with
+            # "`Props` is not fully defined").
+            fm_code = compile(frontmatter, str(path), "exec", dont_inherit=True)
         except Exception as e:  # noqa: BLE001
             raise TemplateError(f"error in component {path.name!r} frontmatter: {e}") from e
     compiled = environment.from_string(_expand_slots(body))
@@ -322,18 +500,18 @@ def _render_epresso_component(
             raise TemplateError(f"invalid props for component {name!r}: {e}") from e
         props = validated.model_dump()
 
-    # A component is scoped only when it declares a scoped <style>: it is then
-    # wrapped in a `data-epresso-*` div and its selectors are rewritten. A
-    # component with no scoped CSS (or only <style is:global>) renders unscoped —
-    # no wrapper. Use <style is:global> or linked CSS for layout shells and other
-    # global styles.
+    # A component is scoped only when it declares a scoped <style>: every element
+    # in its template then gets the `data-epresso-*` attribute and its selectors
+    # are rewritten (no wrapper element is added). A component with no scoped CSS
+    # (or only <style is:global>) renders unscoped. Use <style is:global> or
+    # linked CSS for layout shells and other global styles.
     content_str, slots = _extract_slots(content)
     slots = {k: Markup(v) for k, v in slots.items()}
     scope = _scope_hash(name)
     ctx: dict[str, Any] = {
-        # backward-compat: expose raw kwargs at top level (as .html components
-        # did), plus the new validated ``props`` dict and curated globals.
-        # Globals are spread FIRST so that explicit component props override
+        # raw kwargs are exposed at top level too (pre-Props-model behavior),
+        # plus the validated ``props`` dict and curated globals. Globals are
+        # spread FIRST so that explicit component props override
         # them — e.g. a ``url`` prop must shadow the curated ``url()`` global
         # method, otherwise ``{{ url }}`` renders the method repr.
         **environment.globals,
@@ -357,6 +535,8 @@ def _render_epresso_component(
             html = compiled.render(**ctx)
         except Exception as e:  # noqa: BLE001
             raise TemplateError(f"error rendering component {name!r}: {e}") from e
+        # <Fragment>/<> group siblings without emitting a node.
+        html = unwrap_fragments(html)
 
         if scoped_css.strip():
             rendered_css = environment.from_string(scoped_css).render(**ctx)
@@ -385,28 +565,10 @@ def _render_epresso_component(
 def _render_component(environment: Any, name: str, content: str, kwargs: dict[str, Any]) -> str:
     site = environment.globals.get("site")
     session = environment.globals.get("_render_session")
-    resolved = _resolve_component(environment, name)
-    if resolved is None:
-        raise TemplateError(f"component {name!r} not found (expected templates/components/{name}.ep or .html)")
-    path, kind = resolved
-    if kind == "epresso":
-        return _render_epresso_component(site, session, name, path, content, kwargs, environment)
-    # plain .html component
-    tmpl_name = f"components/{name}.html"
-    content_str, slots = _extract_slots(content)
-    slots = {k: Markup(v) for k, v in slots.items()}
-    ctx: dict[str, Any] = {
-        **kwargs,
-        "content": Markup(content_str),
-        "slots": slots,
-        "slot": lambda name: slots.get(name, Markup("")),
-    }
-    if site is not None:
-        ctx["site"] = site
-    try:
-        return environment.get_template(tmpl_name).render(**ctx)
-    except Exception as e:  # noqa: BLE001
-        raise TemplateError(f"error rendering component {name!r}: {e}") from e
+    path = _resolve_component(environment, name)
+    if path is None:
+        raise TemplateError(f"component {name!r} not found (expected components/{name}.ep)")
+    return _render_epresso_component(site, session, name, path, content, kwargs, environment)
 
 
 class ComponentExtension(Extension):
@@ -432,7 +594,12 @@ class ComponentExtension(Extension):
         node.set_lineno(lineno)
         return node
 
-    def _render(self, name, caller, **kwargs):  # noqa: ANN001
+    def _render(self, *args, **kwargs):  # noqa: ANN001
+        # ``name`` is positional and ``caller`` is injected by Jinja as a keyword:
+        # both are unpacked by hand so a component can take a ``name`` prop (every
+        # form control wants one) without shadowing the component's own name.
+        name = args[0] if args else ""
+        caller = kwargs.pop("caller", None)
         content = Markup(caller()) if caller else Markup("")
         # Caller body is authored by the template currently rendering (top of the
         # author stack); tag it with that scope so the receiving component never

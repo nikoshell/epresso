@@ -1,0 +1,86 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    title: str = ""
+    current: str = ""
+    headings: list = []
+    path: str = "/"
+
+
+docs = list(site.get_collection("docs"))
+---
+
+<Base title={props.title} path={props.path}>
+<div class="site-body">
+    <NavAccordion docs={docs} current={props.current} />
+
+    <Toc placement="inline" headings={props.headings} />
+
+    <main class="content" id="main">
+        <slot />
+    </main>
+
+    <Toc placement="rail" headings={props.headings} />
+</div>
+</Base>
+
+<style>
+.site-body {
+    display: grid;
+    /* Mobile-first baseline: single column. No-JS fallback — without the
+           state attributes published by Base.ep this is all that applies. */
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+        "sidebar"
+        "toc-popover"
+        "content";
+    /* width:100% keeps the grid from shrinking to its content (auto margins
+           would otherwise make it fit-content, which containment zeroes out). */
+    width: 100%;
+    max-width: 80rem;
+    margin: 0 auto;
+    /* Sticky footer: fill the body's flex column. */
+    flex: 1;
+}
+
+:global(html[data-nav-mode="full"]) .site-body {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "sidebar toc-popover"
+        "sidebar content";
+}
+
+/* Page structure follows the state published by Base.ep on <html>. */
+:global(html[data-toc-mode="rail"]) .site-body {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(var(--toc-w), 18rem);
+    grid-template-rows: auto;
+    grid-template-areas: "sidebar content toc";
+}
+
+.content {
+    grid-area: content;
+    /* Query container: children adapt to the article column, not the viewport. */
+    container: content / inline-size;
+    min-width: 0;
+    width: 100%;
+    max-width: var(--content-max);
+    margin-inline: auto;
+    padding-block: var(--space-lg) var(--space-2xl);
+    padding-inline: clamp(var(--space-lg), 4vw, var(--space-xl));
+}
+
+.doc h1 {
+    margin-bottom: var(--space-sm);
+}
+
+.doc-description {
+    font-size: 1.1rem;
+    color: var(--muted);
+    margin: 0 0 var(--space-2xl);
+    max-width: 38rem;
+}
+</style>

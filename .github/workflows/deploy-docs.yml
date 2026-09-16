@@ -6,10 +6,10 @@ name: Deploy Docs
 # Requires GitHub Pages to be enabled for the repo:
 #   Settings → Pages → Source: "GitHub Actions".
 #
-# NOTE: the docs theme emits root-relative URLs (e.g. /assets/…). These work on
-# a User/Organization Pages site or a custom domain. On a project Pages site
-# (https://<user>.github.io/<repo>/), set a custom domain or add `[build] base`
-# support to epresso first.
+# NOTE: the docs theme emits root-relative URLs (e.g. /assets/…). Production is
+# served at the custom domain https://epresso.top/ (root base), so no
+# EPRESSO_BASE prefix is needed. Configure the domain under
+# Settings → Pages → Custom domain.
 
 on:
   push:
@@ -27,6 +27,10 @@ concurrency:
 
 jobs:
   build:
+    # Production Pages lives only in the production repository. The development
+    # repo has no Pages site, so skip there (its docs go to the preview repo
+    # via docs-dev.yml instead).
+    if: ${{ github.repository == (vars.PRODUCTION_REPO || 'nikoshell/epresso') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,8 +45,6 @@ jobs:
 
       - name: Build docs site
         run: uv run --project . epresso build themes/docs
-        env:
-          EPRESSO_BASE: /epresso/
 
       - name: Configure Pages
         uses: actions/configure-pages@v6

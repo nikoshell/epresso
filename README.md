@@ -6,7 +6,8 @@ A modern, **Python-first static site generator** — routes-as-code, content col
 
 ```bash
 pip install epresso
-epresso new blog myblog && cd myblog
+epresso new        # interactive: where, and which starter?
+cd myblog
 epresso dev     # develop with live reload
 epresso build   # deterministic, incremental → dist/
 ```
@@ -28,9 +29,9 @@ epresso build   # deterministic, incremental → dist/
 - Dev server (Starlette + watchfiles) with **WebSocket live reload**, sharing the production incremental engine.
 - Assets: content-hashed `asset()`, `public/` passthrough, esbuild JS bundling, **PostCSS/Tailwind CSS** pipeline, **Pillow responsive images** (`image()` → WebP srcset).
 - **First-class client behavior** — a `.ep` component's `<script>` block is bundled (esbuild) page-level JS, injected before `</body>`. No separate islands/ dir.
-- Generated outputs: `sitemap.xml`, `robots.txt`, `404.html`, `search-index.json`, and an RSS/Atom helper.
+- Generated outputs: `sitemap.xml`, `robots.txt`, `llms.txt`, `404.html`, `search-index.json`, and an RSS/Atom helper.
 - **Plugin API** — a capability registry: named plugins with lifecycle hooks that receive a scoped `Capabilities` handle (never the raw `Site`), so extensions are deterministic and isolated. See the [plugin guide](https://github.com/nikoshell/epresso/blob/main/docs/guides/extending/plugins.md).
-- Theme scaffolding — `epresso new docs|blog`.
+- Theme scaffolding — `epresso new` (interactive), or `epresso new <template|theme|git-url|dir> <dest>`.
 
 ## Installation
 
@@ -43,7 +44,8 @@ pip install epresso        # or: uv tool install epresso
 ## Quickstart
 
 ```bash
-epresso new blog mysite     # scaffold from the blog theme (or: epresso new docs)
+epresso new                 # interactive: dir, then choose a starter
+epresso new docs mysite     # or pass the template and destination
 cd mysite
 epresso dev                 # http://127.0.0.1:4321 with live reload (next free port if busy)
 epresso build               # deterministic + incremental build → dist/
@@ -51,7 +53,17 @@ epresso preview             # build then serve dist/ (production preview)
 epresso check               # validate config + content, list routes
 ```
 
-A blank project:
+The interactive prompt offers:
+
+```
+How would you like to start your new project?
+  1. A basic, helpful starter project (recommended)
+  2. Use the blog template
+  3. Use the docs template
+  4. Use the minimal (empty) template
+```
+
+`epresso new -y` skips the prompts (basic starter, current directory). A blank project:
 
 ```bash
 epresso init mysite && cd mysite
@@ -77,8 +89,9 @@ assets/              # buildable assets (images, js); top-level files land at ro
 public/              # files copied verbatim to the output root
 ```
 
-> Back-compat: a legacy `templates/` root (with `components/` + `layouts/` subdirs) is
-> still loaded when present.
+> Optional `src/`: when a top-level `src/` directory exists, the source dirs
+> above are resolved inside it (Astro/Nuxt-style). `public/`, `dist/`,
+> `site.toml` and `content.config.py` stay at the root.
 
 ## Configuration (`site.toml`)
 
@@ -113,11 +126,22 @@ js  = ["js/app.js"]
 sitemap = true
 robots = true
 
+[seo.llms]                  # llms.txt (https://llmstxt.org/) for LLM crawlers
+enabled = true
+path = "/llms.txt"
+
 [search]
 enabled = true
 index = "search-index.json"
 
 plugins = ["mypkg:MyPlugin"]  # dotted-path plugin specs
+
+[layers]                      # external components/layouts, layered under yours
+use = [
+  "./vendor/components",
+  "pkg:epresso_ui",
+  "github:owner/epresso-components@v1",
+]
 ```
 
 ## Content collections
@@ -178,26 +202,15 @@ Your **content** here.
        return [Route(path=f"/blog/{p.id}/", params={"slug": p.id}, data=p)
                for p in site.get_collection("posts")]
    ---
-   {% extends 'base.html' %}
-   {% block title %}{{ props.title }}{% endblock %}
-   {% block content %}<h1>{{ props.title }}</h1>{{ content|safe }}{% endblock %}
+   <article><h1>{{ props.title }}</h1>{{ content|safe }}</article>
    ```
 
    The `--- … ---` block is **Python** (run with `site` injected); its variables are
-   exposed to the template. A static `.ep` route needs no
-   `get_static_paths()`.
+   exposed to the template. `.ep` files compose with components and layout
+   components — `{% extends %}`/`{% block %}` are rejected. A static `.ep` route
+   needs no `get_static_paths()`.
 
-3. **Template + sidecar** — `pages/blog/[slug].html` + `pages/blog/[slug].py` (legacy):
-
-   ```python
-   from epresso.routing import Route
-
-   def get_static_paths():
-       return [Route(path=f"/blog/{p.id}/", params={"slug": p.id}, data=p)
-               for p in site.get_collection("posts")]
-   ```
-
-4. **Static endpoint** — `pages/robots.txt.py` exporting `get()`:
+3. **Static endpoint** — `pages/robots.txt.py` exporting `get()`:
 
    ```python
    def get():
@@ -300,8 +313,7 @@ output (a `data-epresso-<hash>` attribute), and linked from the head:
 ```
 
 The scoped CSS is written to `dist/_scoped/epresso-<hash>.css` and a `<link>` is
-injected into any page that uses it. Legacy `.html` components and `.html`+`.py`
-routes continue to work unchanged.
+injected into any page that uses it.
 
 #### Layout components are automatically unscoped
 
@@ -353,8 +365,8 @@ removed from the default `content`.
 <div class="card"><h3>{{ props.title }}</h3><header>{{ slot('header') }}</header>{{ content }}</div>
 ```
 
-Use `{{ slot('name') or 'fallback' }}` for slot fallback content. Works for both
-`.ep` and `.html` components.
+Use `{{ slot('name') or 'fallback' }}` for slot fallback content. Works for any
+`.ep` component.
 
 ### Client scripts
 
@@ -382,19 +394,16 @@ So a single `.ep` file bundles: **Python frontmatter
 
 ## Templates
 
-Jinja2 with curated globals — no arbitrary Python:
+Templates are Jinja2 with curated globals and no arbitrary Python. A layout is
+an `.ep` component with `<slot/>` (see [Layouts](#layouts)); a Markdown page wraps
+itself in one via its front-matter `layout`:
 
-```jinja
-{% extends "layouts/base.html" %}
-{% block title %}{{ props.title }}{% endblock %}
-{% block content %}
-  {{ seo(title=props.title, path=route.path) }}
-  <article>
-    <h1>{{ props.title }}</h1>
-    <img src="{{ image('photos/hero.jpg', widths=[400,800,1200], alt='Hero') }}">
-    {{ content | safe }}
-  </article>
-{% endblock %}
+```epresso layouts/Base.ep
+---
+---
+<!doctype html><html><head>
+  <title><slot name="title" /></title>
+</head><body><slot /></body></html>
 ```
 
 Globals: `site`, `url()`, `asset()`, `image()`, `seo()`, `get_collection()`, `get_entry()`, `route`, `params`, `props`, `content`.
@@ -423,22 +432,30 @@ hooks: `before_load`, `on_setup`, `after_load`, `before_build`, `after_build`,
 ```bash
 epresso new docs mydocs     # docs theme (sidebar nav, ToC-friendly)
 epresso new blog myblog     # blog theme (posts, index, RSS feed)
+epresso new minimal mysite  # smallest buildable project
+
+# a git source or a local directory, with an optional @ref for a branch/tag
+epresso new github:owner/epresso-theme-mytheme mysite
+epresso new ./epresso-theme-mytheme mysite
 ```
 
-Themes are git-cloned from their own repos and given to you as a starter project you fully own.
+Themes are git-cloned (or copied) from their own repos and given to you as a starter project you fully own.
 
 ## CLI
 
 | Command | Description |
 |---|---|
 | `epresso init` | Scaffold a blank project |
-| `epresso new <theme> <dest>` | Scaffold from a theme (docs/blog) |
+| `epresso new [template] [dest]` | Scaffold a project (interactive, or pass a template/theme/git URL/directory) |
 | `epresso dev` | Development server with live reload |
 | `epresso build` | Deterministic + incremental production build |
 | `epresso preview` | Build then serve `dist/` (production preview) |
 | `epresso docs` | Build + serve the documentation (port 4321) |
 | `epresso clean` | Remove `dist/` and the build cache |
+| `epresso layers` | List the component/layout layers resolved from `[layers] use` |
 | `epresso check` | Validate config + content, list routes |
+| `epresso fmt` | Format `.ep` files to the canonical section structure |
+| `epresso lsp` | Run the `.ep` Language Server (diagnostics + formatting) over stdio |
 | `epresso version` | Print the version |
 
 ## Development
@@ -447,11 +464,54 @@ Themes are git-cloned from their own repos and given to you as a starter project
 git clone https://github.com/epresso-ssg/epresso
 cd epresso
 uv sync --extra dev
-uv run pytest            # 276 tests
+uv run pytest
 uv run ruff check .
 uv run pyright src/epresso
 uv run pytest --cov=epresso
 ```
+
+### Profiling a build
+
+`epresso build` takes profiling flags, and `python -m epresso` is equivalent to
+the `epresso` console script so profilers can wrap it directly:
+
+```bash
+uv run --project . epresso build themes/docs --perf       # phase timings (render/assets/outputs)
+uv run --project . epresso build themes/docs --profile    # cProfile → epresso-profile.pstats
+uv run python -m pstats epresso-profile.pstats            # inspect the stats file
+
+# Sampling profiler: ~no interpreter overhead, and it can attach to a running
+# dev server, which cProfile cannot.
+uv run py-spy record -o perf.svg -- python -m epresso build themes/docs
+uv run py-spy top -- python -m epresso dev themes/docs
+
+# Or the interpreter's built-in Linux perf trampoline (no extra deps):
+python -X perf -m epresso build themes/docs
+sudo perf record -g -o perf.data -- python -X perf -m epresso build themes/docs
+```
+
+`cProfile` distorts call-heavy code (the docs theme takes ~2.5 s normally and
+~48 s under cProfile), so use it for **call counts and relative ranking**, and a
+sampling profiler for wall-clock shares.
+
+### Build-time regression gate
+
+`scripts/bench.py` builds a theme, divides the best run by a fixed CPU
+workload measured in the same process, and compares that ratio against
+`scripts/perf_baseline.json`. Normalising by the reference workload makes one
+baseline portable between a laptop and a CI runner. CI runs it on every PR and
+fails on a slowdown past the threshold (25%, or `$EPRESSO_PERF_THRESHOLD`).
+
+```bash
+uv run python scripts/bench.py                  # gate against the baseline
+uv run python scripts/bench.py --update         # re-record after an intended change
+uv run python scripts/bench.py --runs 5 --theme themes/blog
+```
+
+Exit codes: `0` within threshold, `1` regression, `2` the build itself failed or
+produced no pages. The baseline is pinned to the interpreter it was recorded on;
+recording it under a different Python makes the gate report-only until you
+re-record. A change of CI hardware may need one `--update` run.
 
 ### Run the bundled themes
 
@@ -482,6 +542,15 @@ vim.opt.rtp:append("/path/to/epresso/extras/nvim")
 
 See [`extras/nvim/README.md`](https://github.com/nikoshell/epresso/blob/main/extras/nvim/README.md) for details and LazyVim
 instructions.
+
+For **VS Code**, `extras/vscode/` bundles syntax highlighting, live diagnostics
+(from the bundled `epresso lsp`) and formatting (via `epresso fmt --stdin`):
+open `extras/vscode/` and press `F5`, or package it with
+`npx @vscode/vsce package`. `epresso lsp` is a dependency-free Language Server
+that any LSP-capable editor can drive (see
+[docs/editor-setup](docs/editor-setup/index.md)). The TextMate grammar is standard
+JSON, so other `.tmLanguage.json` editors can reuse it. See
+[`extras/vscode/README.md`](https://github.com/nikoshell/epresso/blob/main/extras/vscode/README.md).
 
 ## License
 

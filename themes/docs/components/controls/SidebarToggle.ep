@@ -1,0 +1,39 @@
+---
+---
+
+<button class="sidebar-toggle" type="button" aria-controls="sidebar-nav" aria-expanded="false" aria-label="Show navigation">
+    <Icon icon="sidebar" size="18" />
+</button>
+
+<style>
+/* Shared sidebar toggle: opens/closes the off-canvas drawer (<=1024px). It
+       is rendered both in the header's action cluster and inside the drawer, so
+       the button stays put when the drawer slides over it — one component, one
+       look, one behaviour. */
+.sidebar-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: var(--control-h);
+    height: var(--control-h);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+
+.sidebar-toggle:hover {
+    color: var(--ink);
+    background: var(--accent-soft);
+    border-color: var(--line);
+}
+
+@media (max-width: 1024px) {
+    .sidebar-toggle {
+        display: inline-flex;
+    }
+}
+</style>

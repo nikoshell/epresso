@@ -1,6 +1,10 @@
 ---
 from epresso.routing import Route
 
+# Page actions (copy page + markdown menu) are on by default. Turning them off
+# also stops the per-page ``<page>.md`` routes the menu links to.
+page_actions = bool((site.config.theme or {}).get("page_actions", True))
+
 
 def crumbs_for(by_id: dict, path: str) -> list[dict]:
     """Breadcrumb items for a doc path: Home, ancestor dirs (linked when they're
@@ -11,7 +15,10 @@ def crumbs_for(by_id: dict, path: str) -> list[dict]:
         prefix = "/".join(segs[: i + 1])
         hub = by_id.get(prefix)
         if hub:
-            out.append({"label": hub.data.title, "href": f"/{hub.id}/", "current": False})
+            item = {"label": hub.data.title, "current": False}
+            if (hub.computed or {}).get("has_page", True):
+                item["href"] = f"/{hub.id}/"
+            out.append(item)
         else:
             out.append({"label": segs[i].replace("-", " ").title(), "current": False})
     leaf = by_id.get(path)
@@ -20,9 +27,22 @@ def crumbs_for(by_id: dict, path: str) -> list[dict]:
     return out
 
 
+def _markdown_body(d) -> str:
+    """A doc's raw markdown, guaranteed to open with its title as an H1."""
+    body = (d.body or "").strip()
+    if not body:
+        return ""
+    if not body.startswith("# "):
+        body = f"# {d.data.title}\n\n{body}"
+    return body + "\n"
+
+
 def get_static_paths():
     all_docs = list(site.get_collection("docs"))
-    docs = sorted((d for d in all_docs if d.id != ""), key=lambda d: (d.computed or {}).get("order", 0))
+    docs = sorted(
+        (d for d in all_docs if d.id != "" and (d.computed or {}).get("has_page", True)),
+        key=lambda d: (d.computed or {}).get("order", 0),
+    )
     by_id = {d.id: d for d in all_docs}
     n = len(docs)
     routes = []
@@ -30,11 +50,16 @@ def get_static_paths():
         c = d.computed or {}
         prev = docs[(i - 1) % n] if n > 1 else None
         nxt = docs[(i + 1) % n] if n > 1 else None
+        # The page's own markdown, served at ``<page>.md`` so readers (and LLMs)
+        # can take it away verbatim. Body-less hubs have none (no route, no menu).
+        md_body = _markdown_body(d) if page_actions else ""
+        md_path = f"/{d.id}.md" if d.id else "/index.md"
         routes.append(
             Route(
                 path=f"/{d.id}/",
                 params={
                     "slug": d.id,
+                    "markdown": md_path if md_body else "",
                     "crumbs": crumbs_for(by_id, d.id),
                     "source": c.get("source", ""),
                     "prev": {"url": f"/{prev.id}/", "title": prev.data.title} if prev else None,
@@ -45,20 +70,35 @@ def get_static_paths():
                 cache_key=d.digest,
             )
         )
+        if md_body:
+            routes.append(
+                Route(
+                    path=md_path,
+                    content_type="text/markdown; charset=utf-8",
+                    body=md_body,
+                    source=d.file_path,
+                    data=d,
+                    cache_key=f"{d.digest}:md",
+                )
+            )
     return routes
 ---
 
-<Doc title={props.title + ' · ' + site.config.site.name} current={params.slug | default('')} headings={params.headings | default([])}>
+<Doc title={props.title + ' · ' + site.config.site.name} current={params.slug | default('')} headings={params.headings | default([])} path={route.path}>
     <Breadcrumbs crumbs={params.crumbs} />
-    <PageActions source={params.source} prev={params.prev} next={params.next} />
+    {% if page_actions %}
+        <PageActions source={params.source} markdown={params.markdown} prev={params.prev} next={params.next} />
+    {% endif %}
     <article class="doc">
-        <h1>{{ props.title }}</h1>
-        {% if props.description %}<p class="doc-description">{{ props.description }}</p>{% endif %}
-
-        <Toc headings={params.headings} />
-
+        <h1>
+            {{ props.title }}
+        </h1>
+        {% if props.description %}
+            <p class="doc-description">
+                {{ props.description }}
+            </p>
+        {% endif %}
         <Markdown content={content} />
-
         <Pager prev={params.prev} next={params.next} />
     </article>
 </Doc>

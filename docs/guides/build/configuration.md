@@ -17,12 +17,19 @@ name = "My Site"
 url = "https://example.com"
 language = "en"
 description = ""
+repository = ""        # source repo URL for "view source / edit this page" links
+                       # (unset → derived from the git origin remote)
+branch = "main"        # branch those source/edit links point at
+                       # (unset → the repo's HEAD branch)
+docs_source = ""       # set when previewing docs from a path (`epresso docs --theme`)
 
 [build]
 output = "dist"        # output dir (default dist)
 content = "content"    # collection data dir
 pages = "pages"        # routes dir
-templates = "templates"
+layouts = "layouts"    # default layout dir
+components = "components"
+styles = "styles"      # global stylesheet dir
 assets = "assets"
 static = "public"      # files copied verbatim to the output root
 trailing_slash = "always"   # always | never | ignore
@@ -34,6 +41,10 @@ redirects = true       # emit redirect pages from the `redirects` config
 highlight = true       # Pygments syntax highlighting for fenced code
 add_slug_ids = true
 autolink_headings = true
+toc_heading = ""       # reserved: declared but not implemented — nothing reads it yet
+default_layout = ""    # layout for direct Markdown pages that set none of their own
+code_component = ""    # component to render fenced code blocks through, server-side
+code_components = {}   # per-language overrides, e.g. { tree = "Tree" }
 extensions = []        # extra markdown-it features
 components = []        # custom component tags to resolve inside markdown
 
@@ -52,13 +63,44 @@ show_private = false      #   hide `_`-prefixed (private) entries in production
 sitemap = true
 robots = true
 
+[seo.llms]              # llms.txt (https://llmstxt.org/)
+enabled = true
+path = "/llms.txt"
+title = ""             # defaults to the site name
+description = ""       # defaults to the site description
+
+[seo.rss]              # RSS/Atom feed
+enabled = false
+collection = ""        # content collection to build the feed from
+path = "/rss.xml"
+title = ""             # defaults to the site name
+description = ""       # defaults to the site description
+limit = 0              # 0 = all entries
+url_template = "/{collection}/{id}/"   # URL for each item
+
 [search]
 enabled = false
 index = "search-index.json"
 # When enabled, a core BM-25 search index (no external JS) is written to the
 # output at build time. The docs theme consumes it client-side.
 
+[dev]
+toolbar = { enabled = true, placement = "bottom" }   # dev-only overlay; placement: bottom | top
+
+[[docs]]                # build a docs section into the site (repeat for several)
+source = "docs"         # Markdown dir, or a project dir with its own site.toml
+base = "/docs/"         # public sub-path within the site
+theme = ""              # theme for bare Markdown (default: the bundled docs theme)
+out = ""                # output subdir of dist/ (default: derived from base)
+
 plugins = ["mypkg:MyPlugin"]   # dotted-path plugin specs
+
+[layers]
+use = [                          # extra component/layout roots, layered under the site's own
+  "./vendor/components",         #   a directory path
+  "pkg:epresso_ui",              #   an installed Python package
+  "github:owner/epresso-components@v1",  # a repo (tarball, cached in .cache/layers/)
+]
 ```
 
 ## Redirects
@@ -82,8 +124,20 @@ Invalid targets (missing `destination`) are rejected at load time.
 
 The `build.*` keys let you rename the convention directories. There are helper
 accessors on the loaded config: `dir_content()`, `dir_pages()`,
-`dir_templates()`, `dir_assets()`, `dir_static()`,
+`dir_layouts()`, `dir_components()`, `dir_styles()`,
+`dir_assets()`, `dir_static()`,
 `dir_output()`, and `cache_dir()` (the incremental cache, gitignored).
+
+All of these are resolved against `source_root()` — `<root>/src` when that
+directory exists, `<root>` otherwise (Astro/Nuxt-style, no config needed).
+`dir_static()` (`public/`), `dir_output()` (`dist/`) and `cache_dir()`
+(`.cache/`) always stay at the project root, as do `site.toml` and
+`content.config.py`. Content collection `base` paths are resolved against the
+same source root. See
+[Project structure](../../basics/project-structure.md).
+
+External component/layout roots come from `[layers] use` — see
+[Layers](../guides/extending/layers.md).
 
 ## Programmatic loading
 

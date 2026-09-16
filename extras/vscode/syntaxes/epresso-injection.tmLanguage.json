@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Epresso (injection)",
+  "scopeName": "text.epresso.injection",
+  "comment": "Injects Jinja highlighting into HTML positions (tag attribute values, <style>/<script> bodies) inside .ep files only. The `L:text.epresso` selector keeps this out of plain HTML files.",
+  "injectionSelector": "L:text.epresso -meta.frontmatter.epresso -comment -string",
+  "patterns": [{ "include": "#jinja" }],
+  "repository": {
+    "jinja": {
+      "patterns": [
+        { "include": "#jinjaComment" },
+        { "include": "#jinjaExpression" },
+        { "include": "#jinjaStatement" }
+      ]
+    },
+
+    "jinjaComment": {
+      "name": "comment.block.jinja.epresso",
+      "begin": "\\{#-?",
+      "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.jinja.epresso" } },
+      "end": "-?#\\}",
+      "endCaptures": { "0": { "name": "punctuation.definition.comment.end.jinja.epresso" } }
+    },
+
+    "jinjaExpression": {
+      "name": "meta.embedded.expression.jinja.epresso",
+      "begin": "\\{\\{-?",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.jinja.epresso" } },
+      "end": "-?\\}\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.jinja.epresso" } },
+      "patterns": [{ "include": "#jinjaInner" }]
+    },
+
+    "jinjaStatement": {
+      "name": "meta.embedded.statement.jinja.epresso",
+      "begin": "\\{%-?",
+      "beginCaptures": { "0": { "name": "punctuation.section.embedded.begin.jinja.epresso" } },
+      "end": "-?%\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.embedded.end.jinja.epresso" } },
+      "patterns": [{ "include": "#jinjaInner" }]
+    },
+
+    "jinjaInner": {
+      "patterns": [
+        { "include": "#jinjaKeyword" },
+        { "include": "#jinjaFilter" },
+        { "include": "#jinjaStringDouble" },
+        { "include": "#jinjaStringSingle" },
+        { "include": "#jinjaNumber" },
+        { "include": "#jinjaOperator" },
+        { "include": "#jinjaName" }
+      ]
+    },
+
+    "jinjaKeyword": {
+      "match": "\\b(if|elif|else|endif|for|endfor|in|set|endset|block|endblock|macro|endmacro|call|endcall|filter|endfilter|with|endwith|raw|endraw|extends|include|import|from|as|and|or|not|is|none|None|true|True|false|False|component|endcomponent)\\b",
+      "captures": { "0": { "name": "keyword.control.jinja.epresso" } }
+    },
+
+    "jinjaFilter": {
+      "match": "\\|\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": { "1": { "name": "support.function.filter.jinja.epresso" } }
+    },
+
+    "jinjaStringDouble": {
+      "name": "string.quoted.double.jinja.epresso",
+      "begin": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.jinja.epresso" } },
+      "end": "\"",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.jinja.epresso" } }
+    },
+
+    "jinjaStringSingle": {
+      "name": "string.quoted.single.jinja.epresso",
+      "begin": "'",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.jinja.epresso" } },
+      "end": "'",
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.jinja.epresso" } }
+    },
+
+    "jinjaNumber": {
+      "match": "\\b\\d+(\\.\\d+)?\\b",
+      "captures": { "0": { "name": "constant.numeric.jinja.epresso" } }
+    },
+
+    "jinjaOperator": {
+      "match": "[+\\-*/%~=<>!&|.,:]+",
+      "captures": { "0": { "name": "keyword.operator.jinja.epresso" } }
+    },
+
+    "jinjaName": {
+      "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b",
+      "captures": { "0": { "name": "variable.other.jinja.epresso" } }
+    }
+  }
+}

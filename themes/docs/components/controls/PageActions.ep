@@ -4,64 +4,315 @@ from pydantic import BaseModel
 
 class Props(BaseModel):
     source: str = ""
+    markdown: str = ""  # site-root path of this page's .md sibling, e.g. /basics/routing.md
     prev: dict | None = None
     next: dict | None = None
 
 
 repo = site.config.site.repository
 branch = site.config.site.branch
+site_url = (site.config.site.url or "").rstrip("/")
+# Absolute URL of the markdown sibling, for the "open in <AI>" links. No base
+# prefix here: site.url already carries the project-Pages subpath. In the
+# frontmatter ``props`` is the raw kwargs dict (validated later).
+_md = (props.get("markdown") or "") if isinstance(props, dict) else ""
+md_abs = site_url + _md if _md else ""
+ask = "Ask questions about this page"
 ---
 
-{% if repo and props.source %}
-    <div class="page-actions">
-        <a class="page-action" href="{{ repo }}/blob/{{ branch }}/{{ props.source }}" aria-label="View source of this page" title="View source of this page">
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.75 1.75C2.75.784 3.534 0 4.5 0h6.75c.768 0 1.469.281 2 .75h-.003a2.999 2.999 0 0 1 1.878.689c.341.319.625.698.85 1.124V15.25a.75.75 0 0 1-1.184.61L12 13.639l-2.79 2.22a.75.75 0 0 1-.92 0l-2.79-2.22-2.316 2.22a.75.75 0 0 1-1.184-.61V1.75Zm3 0v6.43l1.21-.963a.75.75 0 0 1 .92 0l1.62 1.288 1.62-1.288a.75.75 0 0 1 .92 0l1.21.963V1.75h-7.5Z"/></svg>
-        </a>
-        <a class="page-action" href="{{ repo }}/edit/{{ branch }}/{{ props.source }}" aria-label="Edit this page" title="Edit this page">
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445a6.03 6.03 0 0 1-1.68.441l-1.026.146a.75.75 0 0 1-.863-.863l.146-1.026c.055-.34.207-.677.441-1.68a1.75 1.75 0 0 1 .445-.755l8.61-8.61Z"/></svg>
-        </a>
-        {% if props.prev %}
-            <a class="page-action" href="{{ props.prev.url }}" aria-label="Previous: {{ props.prev.title }}" title="Previous: {{ props.prev.title }}">
-                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.78 12.78a.75.75 0 0 1-1.06 0L4.47 8.53a.75.75 0 0 1 0-1.06l4.25-4.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L6.06 8l4.72 4.72a.75.75 0 0 1 0 1.06Z"/></svg>
-            </a>
-        {% endif %}
-        {% if props.next %}
-            <a class="page-action" href="{{ props.next.url }}" aria-label="Next: {{ props.next.title }}" title="Next: {{ props.next.title }}">
-                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L9.94 8 6.22 3.28a.75.75 0 0 1 0-1.06Z"/></svg>
-            </a>
+<div class="page-actions">
+    <div class="pa-group{% if not props.markdown %} pa-group--solo{% endif %}">
+        <button type="button" class="pa-btn pa-copy" id="page-copy" data-md="{{ url(props.markdown) if props.markdown else '' }}" aria-label="Copy page">
+            <Icon icon="pa-copy" class_name="pa-icon pa-icon--copy" />
+            <Icon icon="pa-check" class_name="pa-icon pa-icon--check" />
+            <span class="pa-label">
+                <span class="pa-label-live">Copy page</span>
+                <span class="pa-label-copied">Copied</span>
+            </span>
+        </button>
+        {% if props.markdown %}
+            <details class="pa-menu" id="page-menu">
+                <summary class="pa-btn pa-more" aria-label="More options" title="More options">
+                    <Icon icon="caret" />
+                </summary>
+                <ul class="pa-menu-list">
+                    <li>
+                        <button type="button" class="pa-item" id="page-copy-md">
+                            <span class="pa-item-label">Copy page</span>
+                            <span class="pa-hint">Copy this page as Markdown</span>
+                        </button>
+                    </li>
+                    <li>
+                        <a href="{{ url(props.markdown) }}" target="_blank" rel="noopener">
+                            <span class="pa-item-label">View as Markdown</span>
+                            <span class="pa-hint">Open this page as plain Markdown</span>
+                        </a>
+                    </li>
+                    {% if repo and props.source %}
+                        <li>
+                            <a href="{{ repo }}/blob/{{ branch }}/{{ props.source }}" target="_blank" rel="noopener">
+                                <span class="pa-item-label">View source of this page</span>
+                                <span class="pa-hint">
+                                    {{ props.source }}
+                                </span>
+                            </a>
+                        </li>
+                    {% endif %}
+                    <li>
+                        <a href="https://chatgpt.com/?q={{ ('Read ' ~ md_abs ~ ' so I can ask questions about it.') | urlencode }}" target="_blank" rel="noopener">
+                            <span class="pa-item-label">Open in ChatGPT</span>
+                            <span class="pa-hint">
+                                {{ ask }}
+                            </span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://claude.ai/new?q={{ ('Read ' ~ md_abs ~ ' so I can ask questions about it.') | urlencode }}" target="_blank" rel="noopener">
+                            <span class="pa-item-label">Open in Claude</span>
+                            <span class="pa-hint">
+                                {{ ask }}
+                            </span>
+                        </a>
+                    </li>
+                </ul>
+            </details>
         {% endif %}
     </div>
-{% endif %}
+</div>
+
+<script>
+(function() {
+    "use strict";
+    if (window.__epressoPageCopy) return;
+    window.__epressoPageCopy = true;
+    var btn = document.getElementById("page-copy");
+    if (!btn) return;
+    var timer;
+
+    /* The page's markdown is a static sibling file (see the route builder
+       in pages/[...slug].ep), so copying is just fetch + clipboard. No
+       DOM-derived fallback: the fetch only fails where the page isn't
+       being served, which the docs never promise. */
+    function copyPage() {
+        var md = btn.getAttribute("data-md");
+        if (!md) return;
+        fetch(md)
+            .then(function(r) {
+                if (!r.ok) throw new Error(String(r.status));
+                return r.text();
+            })
+            .then(function(text) {
+                return navigator.clipboard.writeText(text);
+            })
+            .then(function() {
+                btn.classList.add("is-done");
+                btn.setAttribute("aria-label", "Copied");
+                clearTimeout(timer);
+                timer = setTimeout(function() {
+                    btn.classList.remove("is-done");
+                    btn.setAttribute("aria-label", "Copy page");
+                }, 1600);
+            })
+            .catch(function() {
+                /* fetch or clipboard unavailable: leave the label as it is */
+            });
+    }
+
+    btn.addEventListener("click", copyPage);
+
+    var menu = document.getElementById("page-menu");
+    var mdBtn = document.getElementById("page-copy-md");
+    if (mdBtn) mdBtn.addEventListener("click", copyPage);
+    /* Choosing anything closes the menu, the new-tab link included. */
+    if (menu) {
+        menu.addEventListener("click", function(e) {
+            if (e.target.closest && e.target.closest("a, button")) menu.open = false;
+        });
+    }
+
+    /* Close the menu on outside click or Escape (native <details> gives the
+       open/close and keyboard behaviour for free). */
+    if (!menu) return;
+    document.addEventListener("click", function(e) {
+        if (menu.open && !menu.contains(e.target)) menu.open = false;
+    });
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape" && menu.open) {
+            menu.open = false;
+            var s = menu.querySelector("summary");
+            if (s) s.focus();
+        }
+    });
+})();
+</script>
 
 <style>
-    .page-actions {
-        float: right;
-        display: flex;
-        gap: var(--space-xs);
-        margin: var(--space-sm) 0 var(--space-md) var(--space-md);
-    }
+.page-actions {
+    float: right;
+    margin: var(--space-sm) 0 var(--space-md) var(--space-md);
+}
 
-    .page-action {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 2rem;
-        height: 2rem;
-        border: 1px solid var(--line);
-        border-radius: var(--radius-sm);
-        background: var(--surface);
-        color: var(--muted);
-        transition: border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
-    }
+.pa-group {
+    display: inline-flex;
+    align-items: stretch;
+}
 
-    .page-action:hover {
-        border-color: var(--accent);
-        color: var(--accent);
-        text-decoration: none;
-    }
+.pa-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    height: 1.75rem;
+    padding: 0 0.625rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
 
-    .page-action svg {
-        width: 15px;
-        height: 15px;
+.pa-btn:hover {
+    background: var(--accent-soft);
+}
+
+.pa-btn svg {
+    width: 14px;
+    height: 14px;
+    flex: none;
+}
+
+/* Segmented: only the outer corners are rounded. */
+.pa-copy {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.pa-group--solo .pa-copy {
+    border-radius: var(--radius-sm);
+}
+
+.pa-icon--check {
+    display: none;
+}
+
+.pa-copy.is-done .pa-icon--copy {
+    display: none;
+}
+
+.pa-copy.is-done .pa-icon--check {
+    display: inline;
+}
+
+/* Stacked labels keep the button from resizing when it says "Copied". */
+.pa-label {
+    display: grid;
+}
+
+.pa-label>* {
+    grid-area: 1 / 1;
+}
+
+/* "Copied" is a CSS state: .is-done swaps the label and the icon. Both
+       labels share one grid cell, so the hidden one keeps the width stable. */
+.pa-label-copied {
+    visibility: hidden;
+}
+
+.pa-copy.is-done .pa-label-live {
+    visibility: hidden;
+}
+
+.pa-copy.is-done .pa-label-copied {
+    visibility: visible;
+}
+
+/* The menu trigger (a native <details>, so it works without JS). */
+.pa-menu {
+    position: relative;
+}
+
+.pa-more {
+    width: 1.75rem;
+    padding: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 0;
+    list-style: none;
+}
+
+.pa-more::-webkit-details-marker {
+    display: none;
+}
+
+.pa-more svg {
+    transition: transform var(--dur-fast) var(--ease);
+}
+
+.pa-menu[open] .pa-more svg {
+    transform: rotate(90deg);
+}
+
+.pa-menu-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: var(--z-popover);
+    min-width: 15rem;
+    margin: 0;
+    padding: var(--space-xs);
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: var(--shadow-md);
+}
+
+.pa-menu-list a,
+.pa-item {
+    display: block;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.82rem;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.pa-menu-list a:hover,
+.pa-item:hover {
+    background: var(--accent-soft);
+    text-decoration: none;
+}
+
+.pa-item-label {
+    display: block;
+}
+
+.pa-hint {
+    display: block;
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+:global(html[data-nav-mode="compact"]) .page-actions {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .pa-btn,
+    .pa-more svg {
+        transition: none;
     }
+}
 </style>

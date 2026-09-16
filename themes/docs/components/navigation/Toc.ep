@@ -7,9 +7,30 @@ class Props(BaseModel):
     placement: str = "inline"
 ---
 
-{% if props.headings %}
+{% if props.placement == "inline" and props.headings %}
+    <nav class="toc toc--inline" aria-label="On this page">
+        <details>
+            <summary class="toc-trigger">
+                <Icon icon="chevron-down" class_name="toc-chevron" size="16" />
+                <svg class="toc-ring" role="progressbar" viewBox="0 0 18 18" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" width="18" height="18">
+                    <circle class="toc-ring-track" cx="9" cy="9" r="7.5" fill="none" stroke-width="1.5"/>
+                    <circle class="toc-ring-progress" cx="9" cy="9" r="7.5" fill="none" stroke-width="1.5" stroke="currentColor" stroke-dasharray="47.12388980384689" stroke-dashoffset="47.12388980384689" stroke-linecap="round" transform="rotate(-90 9 9)"/>
+                </svg>
+                <span class="toc-current">On this page</span>
+            </summary>
+            <ul>
+                {% for h in props.headings %}
+                    {% if h.depth <= 2 %}
+                        <li class="toc-depth-{{ h.depth }}"><a href="#{{ h.slug }}">{{ h.text }}</a></li>
+                    {% endif %}
+                {% endfor %}
+            </ul>
+        </details>
+    </nav>
+{% elif props.headings %}
     <nav class="toc toc--{{ props.placement }}" aria-label="On this page">
         <div class="toc-label">On this page</div>
+        <span class="toc-indicator" aria-hidden="true"></span>
         <ul>
             {% for h in props.headings %}
                 {% if h.depth <= 2 %}
@@ -21,139 +42,358 @@ class Props(BaseModel):
 {% endif %}
 
 <script>
-    (function() {
-        "use strict";
-        if (window.__epressoTocSpy) return;
-        window.__epressoTocSpy = true;
-        var links = [];
-        var seen = {};
-        var headings = [];
-        Array.prototype.forEach.call(document.querySelectorAll(".toc a"), function(a) {
-            a.__tocTarget = a.getAttribute("href").slice(1);
-            links.push(a);
-            if (!seen[a.__tocTarget]) {
-                seen[a.__tocTarget] = true;
-                var el = document.getElementById(a.__tocTarget);
-                if (el) headings.push(el);
+(function() {
+    "use strict";
+    if (window.__epressoTocSpy) return;
+    window.__epressoTocSpy = true;
+    var tocs = Array.prototype.slice.call(document.querySelectorAll(".toc"));
+    var links = [];
+    var seen = {};
+    var headings = [];
+    tocs.forEach(function(toc) {
+        /* Progressive enhancement: hide the static per-item marker and let the
+           shared indicator slide between active items instead. */
+        toc.classList.add("toc--animated");
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".toc a"), function(a) {
+        a.__tocTarget = a.getAttribute("href").slice(1);
+        links.push(a);
+        if (!seen[a.__tocTarget]) {
+            seen[a.__tocTarget] = true;
+            var el = document.getElementById(a.__tocTarget);
+            if (el) headings.push(el);
+        }
+    });
+    if (!links.length || !headings.length) return;
+
+    function setActive(idx) {
+        var target = idx >= 0 && idx < headings.length ? headings[idx].id : null;
+        links.forEach(function(a) {
+            a.classList.toggle("active", a.__tocTarget === target);
+        });
+        tocs.forEach(function(toc) {
+            var active = toc.querySelector("a.active");
+            var current = toc.querySelector(".toc-current");
+            if (current) current.textContent = active ? active.textContent : "On this page";
+            var indicator = toc.querySelector(".toc-indicator");
+            var list = toc.querySelector("ul");
+            if (!indicator || !list) return;
+            if (!active) {
+                indicator.classList.remove("is-visible");
+                return;
             }
+            var tocRect = toc.getBoundingClientRect();
+            var listRect = list.getBoundingClientRect();
+            var activeRect = active.getBoundingClientRect();
+            /* Inset the marker vertically to match the static ::before
+               (4px top/bottom of the link box). */
+            indicator.style.left = (listRect.left - tocRect.left) + "px";
+            indicator.style.height = Math.max(activeRect.height - 8, 0) + "px";
+            indicator.style.transform = "translateY(" + (activeRect.top - tocRect.top + 4) + "px)";
+            indicator.classList.add("is-visible");
         });
-        if (!links.length || !headings.length) return;
+    }
 
-        function setActive(idx) {
-            var target = idx >= 0 && idx < headings.length ? headings[idx].id : null;
-            links.forEach(function(a) {
-                a.classList.toggle("active", a.__tocTarget === target);
-            });
-        }
-
-        function onScroll() {
-            var offset = 90; /* sticky header + a little */
-            var current = -1;
-            headings.forEach(function(h, i) {
-                if (h.getBoundingClientRect().top <= offset) current = i;
-            });
-            setActive(current);
-        }
-        window.addEventListener("scroll", onScroll, {
-            passive: true
+    /* The heading whose section is under the header right now. Shared by
+       the scroll-spy and the </> jump keys so both agree on "current". */
+    function currentIndex() {
+        var offset = 90; /* sticky header + a little */
+        var idx = -1;
+        headings.forEach(function(h, i) {
+            if (h.getBoundingClientRect().top <= offset) idx = i;
         });
-        onScroll();
-    })();
+        /* A run of short trailing sections can be squeezed into less
+           room than the 90px crossing test needs, so none of their
+           headings ever reaches it — the page simply runs out of room
+           to scroll them that far up. Once we've scrolled past the
+           *midpoint* to the next heading, hand "current" to it anyway;
+           repeat for a whole run of squeezed sections. */
+        while (idx + 1 < headings.length) {
+            var a = idx >= 0 ? headings[idx].getBoundingClientRect().top : -Infinity;
+            var b = headings[idx + 1].getBoundingClientRect().top;
+            if (offset < (a + b) / 2) break;
+            idx += 1;
+        }
+        return idx;
+    }
+
+    function onScroll() {
+        setActive(currentIndex());
+        updateRing();
+    }
+
+    /* Reading-progress ring in the inline popover trigger. */
+    var RING_C = 47.12388980384689;
+    var ring = document.querySelector(".toc--inline .toc-ring-progress");
+    var ringBar = document.querySelector(".toc--inline .toc-ring");
+
+    function updateRing() {
+        if (!ring) return;
+        var art = document.querySelector("article.doc") || document.querySelector("main.content");
+        if (!art) return;
+        var r = art.getBoundingClientRect();
+        var total = r.height - window.innerHeight;
+        var p = total > 0 ? Math.min(Math.max(-r.top / total, 0), 1) : (r.top <= 0 ? 1 : 0);
+        ring.style.strokeDashoffset = (RING_C * (1 - p)).toFixed(2);
+        if (ringBar) ringBar.setAttribute("aria-valuenow", p.toFixed(3));
+    }
+    window.addEventListener("scroll", onScroll, {
+        passive: true
+    });
+    onScroll();
+
+    /* Comma/period jump to the previous / next heading, from wherever
+       currentIndex() says we are — the same "current" the scroll-spy
+       highlights. */
+    function jump(delta) {
+        var target = currentIndex() + delta;
+        if (target < 0) target = 0;
+        if (target > headings.length - 1) target = headings.length - 1;
+        var el = headings[target];
+        if (!el || !el.id) return;
+        el.scrollIntoView({
+            block: "start"
+        });
+        /* Keep the URL shareable without spamming history. */
+        if (window.history && history.replaceState) history.replaceState(null, "", "#" + el.id);
+    }
+
+    /* Comma/period step through headings. The key binding itself lives in
+       ShortcutsOverlay.ep, with the other global shortcuts. */
+    document.addEventListener("epresso:shortcut", function(e) {
+        if (e.detail === "section-prev") jump(-1);
+        else if (e.detail === "section-next") jump(1);
+    });
+
+    /* Collapse the inline popover after choosing a heading, or on an
+       outside click. */
+    document.addEventListener("click", function(e) {
+        var a = e.target.closest ? e.target.closest(".toc--inline a") : null;
+        if (a) {
+            var d = a.closest("details");
+            if (d) d.open = false;
+            return;
+        }
+        Array.prototype.forEach.call(document.querySelectorAll(".toc--inline details[open]"), function(d) {
+            if (!d.contains(e.target)) d.open = false;
+        });
+    });
+})();
 </script>
 
 <style>
-    .toc-label {
-        font: var(--text-caption);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        margin-bottom: var(--space-sm);
-    }
+.toc {
+    position: relative;
+}
 
-    .toc--rail .toc-label {
-        font-size: 0.82rem;
-    }
+/* Shared active marker that slides between items (replaces the static
+       per-item ::before once the spy script is running). */
+.toc-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 2px;
+    height: 0;
+    border-radius: 1px;
+    background: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform var(--dur-normal) var(--ease), height var(--dur-normal) var(--ease), opacity var(--dur-fast) var(--ease);
+}
 
-    .toc ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
+.toc-indicator.is-visible {
+    opacity: 1;
+}
 
-    .toc--rail ul {
-        border-left: 1px solid var(--line);
-    }
+.toc--animated li a.active::before {
+    display: none;
+}
 
-    .toc li {
-        position: relative;
-        margin: 0.15rem 0;
-    }
+.toc-label {
+    font: var(--text-caption);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: var(--space-sm);
+}
 
-    .toc--rail li {
-        margin: 0.2rem 0;
-    }
+.toc--rail .toc-label {
+    font-size: 0.82rem;
+}
 
-    .toc a {
-        display: block;
-        color: var(--muted);
-        font-size: 0.92rem;
-        padding-top: 4px;
-        padding-bottom: 4px;
-        padding-left: 16px;
-    }
+.toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
 
-    .toc--rail a {
-        font-size: 0.9rem;
-        line-height: 1.4;
-    }
+.toc--rail ul {
+    border-left: 1px solid var(--line);
+}
 
-    .toc a:hover {
-        color: var(--ink);
-        text-decoration: none;
-    }
+.toc li {
+    position: relative;
+    margin: 0.15rem 0;
+}
 
-    .toc a.active {
-        color: var(--accent);
-    }
+.toc--rail li {
+    margin: 0.2rem 0;
+}
 
-    .toc li a.active::before {
-        content: "";
-        position: absolute;
-        left: -1px;
-        top: 4px;
-        bottom: 4px;
-        width: 2px;
-        background: var(--accent);
-    }
+.toc a {
+    display: block;
+    color: var(--muted);
+    font-size: 0.92rem;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 16px;
+}
 
-    .toc-depth-2 {
-        padding-left: 16px;
-    }
+.toc--rail a {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
 
-    .toc--inline {
-        border-left: 1px solid var(--line);
-        margin: 0 0 var(--space-xl);
-        padding-left: var(--space-sm);
-    }
+.toc a:hover {
+    color: var(--ink);
+    text-decoration: none;
+}
 
-    .toc--rail {
-        grid-area: toc;
-        display: none;
-        position: sticky;
-        top: calc(var(--header-h) + var(--space-lg));
-        align-self: start;
-        padding: var(--space-lg) var(--space-md);
-        max-height: calc(100vh - var(--header-h) - var(--space-2xl));
-        overflow-y: auto;
-    }
+.toc a.active {
+    color: var(--accent);
+}
 
-    @media (min-width: 1281px) {
-        .toc--inline {
-            display: none;
-        }
+.toc li a.active::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--accent);
+}
 
-        .toc--rail {
-            display: block;
-        }
+.toc--inline {
+    grid-area: toc-popover;
+    position: sticky;
+    top: var(--header-h);
+    z-index: var(--z-popover);
+    display: flex;
+    justify-content: flex-end;
+    /* Keep the same height when there are no headings (the bar then only
+           hosts the sidebar toggle) so the off-canvas sidebar offset matches. */
+    min-height: calc(var(--toc-bar-h) + 1px);
+}
+
+/* Bar background/blur live on a pseudo-element so the bar itself never
+       becomes a backdrop root — otherwise the dropdown's own backdrop-filter
+       would be clamped and its blur would not sample the page. */
+.toc--inline::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-behind);
+    background: color-mix(in oklab, var(--bg) 80%, transparent);
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+}
+
+.toc--inline details {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.toc--inline .toc-trigger {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: var(--toc-bar-h);
+    padding: 0 var(--space-md);
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+
+.toc--inline .toc-trigger::-webkit-details-marker {
+    display: none;
+}
+
+.toc--inline .toc-current {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.toc--inline .toc-ring {
+    flex: none;
+}
+
+.toc--inline .toc-ring-track {
+    stroke: currentColor;
+    stroke-opacity: 0.25;
+}
+
+.toc--inline .toc-ring-progress {
+    transition: stroke-dashoffset var(--dur-fast) var(--ease);
+}
+
+.toc--inline .toc-chevron {
+    flex: none;
+    transition: transform var(--dur-fast) var(--ease);
+}
+
+.toc--inline details[open] .toc-chevron {
+    transform: rotate(180deg);
+}
+
+.toc--inline ul {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    margin: 0;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    list-style: none;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    box-shadow: var(--shadow-lg);
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.toc--inline details:not([open]) ul {
+    display: none;
+}
+
+.toc--rail {
+    grid-area: toc;
+    display: none;
+    flex-direction: column;
+    position: sticky;
+    top: calc(var(--header-h) + var(--space-lg));
+    align-self: start;
+    padding: var(--space-lg) var(--space-md);
+    max-height: calc(100vh - var(--header-h) - var(--space-2xl));
+    max-height: calc(100dvh - var(--header-h) - var(--space-2xl));
+    overflow-y: auto;
+}
+
+/* Structural: the bar/rail switch follows the page state on <html>. */
+:global(html[data-toc-mode="rail"]) .toc--inline {
+    display: none;
+}
+
+:global(html[data-toc-mode="rail"]) .toc--rail {
+    display: flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toc-indicator {
+        transition: none;
     }
+}
 </style>

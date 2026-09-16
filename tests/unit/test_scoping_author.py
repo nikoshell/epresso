@@ -46,12 +46,12 @@ def test_caller_passed_content_is_scoped_to_the_author_not_the_child():
     scope, so Caller can style it with its own scoped CSS (author scoping)."""
     html = _render(
         {
-            "templates/components/Child.ep": "<div class='c'>{{ content }}</div>\n<style>.c{color:red}</style>",
-            "templates/components/Caller.ep": (
+            "components/Child.ep": "<div class='c'>{{ content }}</div>\n<style>.c{color:red}</style>",
+            "components/Caller.ep": (
                 "<section class='s'><Child><em class='k'>hi</em></Child></section>\n"
                 "<style>.s{color:blue}.k{color:green}</style>"
             ),
-            "pages/index.html": "<Caller />",
+            "pages/index.ep": "---\n---\n<Caller />",
         }
     )
     em = _opening(html, r"<em class='k'[^>]*>")

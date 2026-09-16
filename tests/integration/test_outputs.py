@@ -50,6 +50,58 @@ def test_robots_generated(site):
     assert "sitemap.xml" in robots
 
 
+def test_llms_txt_generated(site):
+    site.build()
+    txt = (site.config.dir_output() / "llms.txt").read_text()
+    assert txt.startswith("# Test")
+    assert "- [Home](https://example.com/)" in txt
+    assert "## Blog" in txt
+    assert "- [A](https://example.com/blog/a/)" in txt
+    assert "- [B](https://example.com/blog/b/)" in txt
+
+
+def test_llms_txt_custom_title_description_path(site):
+    from epresso.config import LlmsConfig
+
+    site.config.seo.llms = LlmsConfig(title="Custom", description="About us", path="/ai.txt")
+    site.build()
+    out = site.config.dir_output()
+    assert not (out / "llms.txt").exists()
+    txt = (out / "ai.txt").read_text()
+    assert txt.startswith("# Custom")
+    assert "> About us" in txt
+
+
+def test_llms_txt_disabled(site):
+    from epresso.config import LlmsConfig
+
+    site.config.seo.llms = LlmsConfig(enabled=False)
+    site.build()
+    assert not (site.config.dir_output() / "llms.txt").exists()
+
+
+def test_llms_txt_user_provided_kept(site):
+    static = site.config.root / "public"
+    static.mkdir(parents=True, exist_ok=True)
+    (static / "llms.txt").write_text("# Mine\n")
+    site.build()
+    assert (site.config.dir_output() / "llms.txt").read_text() == "# Mine\n"
+
+
+def test_llms_escapes_link_text(site):
+    from epresso import outputs
+    from epresso.routing import Route
+
+    out = site.config.dir_output()
+    outputs.write_llms(
+        site,
+        out,
+        [Route(path="/a/", data={"title": "A [b] c", "description": "d"})],
+    )
+    txt = (out / "llms.txt").read_text()
+    assert "[A \\[b\\] c](https://example.com/a/): d" in txt
+
+
 def test_rss_generated_from_collection(site):
     from epresso.config import RssConfig
 
@@ -144,14 +196,15 @@ def test_seo_template_helper(site):
     assert "<title>T</title>" in tag
     assert "og:title" in tag
     assert "canonical" in tag
+    assert 'name="twitter:card" content="summary"' in tag  # no image → small card
 
 
 def test_default_layout_for_direct_markdown(tmp_path):
     root, site = _make(
         {
             "layouts/Base.ep": (
-                "<!doctype html><html><head><title>{% block title %}{{ page.title }}{% endblock %}</title></head>"
-                "<body>{% block content %}{{ content | safe }}{% endblock %}</body></html>\n"
+                '---\n---\n<!doctype html><html><head><title><slot name="title" /></title></head>'
+                "<body><slot /></body></html>\n"
             ),
             "pages/page.md": "---\ntitle: Hello\n---\n# Welcome\n",
         },

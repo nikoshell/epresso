@@ -2,8 +2,7 @@
 
 ``pages/`` files become routes:
   * ``pages/about.md``            → direct Markdown page (layout via front matter)
-  * ``pages/blog/[slug].html``    → template route; ``[slug].py`` sidecar exports ``get_static_paths()``
-  * ``pages/about.html``          → static template route (no sidecar)
+  * ``pages/about.ep``            → single-file route; frontmatter may export ``get_static_paths()``
   * ``pages/robots.txt.py``       → endpoint exporting ``get(context) -> (content_type, body)``
 
 Route parts: static, ``{param}``, ``{...param}`` (spread). Clean directory URLs
@@ -32,7 +31,6 @@ class Route:
     """A concrete route to render/write."""
 
     path: str  # URL path, e.g. ``/blog/hello/`` or ``/robots.txt``
-    template: str | None = None  # template name for HTML routes
     template_str: str | None = None  # inline template (from a .ep file body)
     params: dict[str, Any] = field(default_factory=dict)
     data: Any = None  # props passed to the template
@@ -176,11 +174,12 @@ def redirect_routes(config: Any) -> list[Route]:
     return out
 
 
-def paginate(entries: list, per_page: int, base_path: str, *, template: str | None = None):
+def paginate(entries: list, per_page: int, base_path: str):
     """Split ``entries`` into page routes: ``base_path/``, ``base_path/page/N/`` …
 
     Returns a list of ``Route`` objects suitable for a ``get_static_paths()``
-    return value. Each route carries ``params={"page": n}`` and
+    return value; every returned route renders the calling ``.ep`` route's body.
+    Each route carries ``params={"page": n}`` and
     ``data={"entries": [...], "page": n, "num_pages": N, "prev": ..., "next": ...}``.
     """
     per_page = max(1, int(per_page))
@@ -196,7 +195,6 @@ def paginate(entries: list, per_page: int, base_path: str, *, template: str | No
         routes.append(
             Route(
                 path=path,
-                template=template,
                 params={"page": n},
                 data={
                     "entries": chunk,
@@ -218,8 +216,7 @@ class RoutePattern:
     rel: Path  # relative to pages/
     segments: list[list[dict[str, Any]]]
     params: dict[str, Any]
-    kind: str  # 'direct_md' | 'template' | 'endpoint' | 'epresso'
-    sidecar: Path | None = None
+    kind: str  # 'direct_md' | 'endpoint' | 'epresso'
 
     @property
     def dynamic(self) -> bool:
@@ -248,16 +245,17 @@ def discover_route_patterns(pages_dir: Path) -> list[RoutePattern]:
             segments, params = parse_route(f.relative_to(pages_dir))
             patterns.append(RoutePattern(f, rel, segments, params, "epresso"))
         elif suffix == ".html":
-            segments, params = parse_route(f.relative_to(pages_dir))
-            sidecar = f.with_suffix(".py")
-            patterns.append(
-                RoutePattern(f, rel, segments, params, "template", sidecar if sidecar.exists() else None)
+            # Deliberately unsupported: pages are .md (markdown) or .ep
+            # (Python frontmatter + Jinja). Fail loudly instead of silently
+            # dropping the route.
+            raise RouteError(
+                f"{rel.as_posix()}: .html page templates are not supported — use a .ep route",
+                path=str(f),
+                fix="rename the file to .ep (Python frontmatter + Jinja body); a "
+                ".py sidecar's get_static_paths() moves into the .ep frontmatter",
             )
         elif suffix == ".py":
-            # endpoint OR a sidecar for an .html (handled there). Only add if no sibling .html.
-            sibling_html = f.with_suffix(".html")
-            if sibling_html.exists():
-                continue
+            # static endpoint exporting get() -> (content_type, body)
             segments, params = parse_route(f.relative_to(pages_dir))
             patterns.append(RoutePattern(f, rel, segments, params, "endpoint"))
     return patterns
@@ -295,7 +293,10 @@ def _script_hash(content: str) -> str:
 def _load_epresso_frontmatter(path: Path, data_api: Any) -> Any:
     """Exec the Python frontmatter of a .ep file (site injected), return the module."""
     frontmatter = parse_document(path.read_text(encoding="utf-8"), "ep").frontmatter
-    code = compile(frontmatter, str(path), "exec")
+    # ``dont_inherit=True`` — see components._parse_component: without it the
+    # frontmatter inherits this module's PEP 563 future and every annotation
+    # becomes a string that pydantic cannot resolve.
+    code = compile(frontmatter, str(path), "exec", dont_inherit=True)
     namespace: dict[str, Any] = {"site": data_api}
     try:
         exec(code, namespace)
@@ -309,64 +310,13 @@ def _entry_digest(data: Any) -> str | None:
 
 
 def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[Route]:
-    """Expand a RoutePattern into concrete Routes (calling get_static_paths for templates)."""
+    """Expand a RoutePattern into concrete Routes (calling get_static_paths where exported)."""
     if pattern.kind == "direct_md":
         # direct markdown: single route (static). cache_key = file digest so a
         # content edit re-renders only this page.
         return [
             Route(
                 path=_build_path(pattern.segments, {}, trailing),
-                source=pattern.file,
-                cache_key=file_digest(pattern.file),
-            )
-        ]
-
-    if pattern.kind == "template":
-        tmpl_name = pattern.rel.as_posix().replace("\\", "/")
-        if pattern.sidecar:
-            module = _load_module(pattern.sidecar, {"site": data_api})
-            gsp = getattr(module, "get_static_paths", None)
-            if not callable(gsp):
-                raise RouteError(f"{pattern.sidecar.name} must export get_static_paths()", path=str(pattern.sidecar))
-            try:
-                raw_routes = gsp()
-            except Exception as e:  # noqa: BLE001
-                raise RouteError(f"get_static_paths() failed in {pattern.sidecar.name}: {e}\n{traceback.format_exc()}", path=str(pattern.sidecar)) from e
-            out: list[Route] = []
-            for r in list(raw_routes or []):  # type: ignore[union-attr]
-                if isinstance(r, Route):
-                    params = r.params
-                    path = r.path
-                    cache_key = r.cache_key
-                    data = r.data
-                else:
-                    # dict: {path?, params?, data?, cacheKey?}
-                    params = dict(r.get("params", {}))
-                    path = r.get("path") or _build_path(pattern.segments, params, trailing)
-                    cache_key = r.get("cacheKey")
-                    data = r.get("data", None)
-                # Auto-derive cache_key from a rendered content entry's digest so
-                # content edits re-render only the affected paths.
-                if cache_key is None:
-                    cache_key = _entry_digest(data)
-                out.append(
-                    Route(
-                        path=path,
-                        template=tmpl_name,
-                        params=params,
-                        data=data,
-                        source=pattern.file,
-                        cache_key=cache_key,
-                    )
-                )
-            return out
-        # static template (no sidecar): single route; cache_key = template file
-        # digest so data-only edits can still be incremental (contentHashes track
-        # the collections the template consumes).
-        return [
-            Route(
-                path=_build_path(pattern.segments, {}, trailing),
-                template=tmpl_name,
                 source=pattern.file,
                 cache_key=file_digest(pattern.file),
             )
@@ -393,9 +343,10 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
         gsp = namespace.get("get_static_paths")
         # Not an endpoint => body is a Jinja template: enforce components-over-
         # Jinja composition here (endpoints return generated content, skip them).
-        from .enforce import ensure_components
+        from .enforce import ensure_components, ensure_ep_structure
 
         ensure_components(body, label=str(pattern.file))
+        ensure_ep_structure(doc, label=str(pattern.file))
         out: list[Route] = []
         if callable(gsp):
             try:
@@ -403,11 +354,17 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
             except Exception as e:  # noqa: BLE001
                 raise RouteError(f"get_static_paths() failed in {pattern.file.name}: {e}\n{traceback.format_exc()}", path=str(pattern.file)) from e
             for r in list(raw_routes or []):  # type: ignore[union-attr]
+                raw_body = None
+                content_type = "text/html"
+                raw_source = None
                 if isinstance(r, Route):
                     params = r.params
                     path = r.path
                     cache_key = r.cache_key
                     data = r.data
+                    raw_body = r.body
+                    content_type = r.content_type
+                    raw_source = r.source
                 else:
                     params = dict(r.get("params", {}))
                     path = r.get("path") or _build_path(pattern.segments, params, trailing)
@@ -415,6 +372,22 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
                     data = r.get("data", None)
                 if cache_key is None:
                     cache_key = _entry_digest(data)
+                if raw_body is not None:
+                    # A returned route bringing its own body is written verbatim
+                    # (no template, no scoped CSS/JS) — e.g. a sibling ``.md``
+                    # rendering of a page alongside its HTML route.
+                    out.append(
+                        Route(
+                            path=path,
+                            content_type=content_type,
+                            body=raw_body,
+                            params=params,
+                            data=data,
+                            source=raw_source or pattern.file,
+                            cache_key=cache_key,
+                        )
+                    )
+                    continue
                 out.append(Route(path=path, template_str=body, params=params, data=data, source=pattern.file, cache_key=cache_key, scoped_css=scoped_css, scope_hash=scope_hash, scripts=scripts, script_hash=script_hash, frontmatter=frontmatter_vars))
             return out
         # no get_static_paths -> single static route

@@ -8,8 +8,6 @@ routes. Content stays in `content/`; `pages/` produces URLs.
 | File | Kind |
 |------|------|
 | `pages/about.md` | Direct Markdown page (layout via front matter) |
-| `pages/about.html` | Static template route |
-| `pages/blog/[slug].html` + `[slug].py` | Template route + sidecar exporting `get_static_paths()` |
 | `pages/blog/[slug].ep` | Single-file route (Python frontmatter + Jinja body) |
 | `pages/robots.txt.py` | Endpoint exporting `get() -> (content_type, body)` |
 
@@ -19,7 +17,7 @@ Path segments support static text, `{param}`, and `{...param}` (spread):
 
 ```
 pages/blog/index.md          → /blog/
-pages/blog/[slug].html       → /blog/<slug>/
+pages/blog/[slug].ep         → /blog/<slug>/
 pages/blog/[slug]/index.ep   → /blog/<slug>/   (index.ep = directory root)
 pages/blog/[...slug].ep      → /blog/a/b/     (spread captures the rest)
 ```
@@ -29,7 +27,7 @@ generated with a configurable trailing slash (`[build] trailing_slash`).
 
 ## Endpoints
 
-A `.py` page that exports `get()` (no sibling `.html`) becomes a static endpoint:
+A `.py` page that exports `get()` becomes a static endpoint:
 
 ```python pages/robots.txt.py
 def get():
@@ -38,22 +36,6 @@ def get():
 
 File-style URLs like `/robots.txt` skip the trailing slash. `data.json` and RSS
 feeds are commonly built this way.
-
-## Template + sidecar
-
-`pages/blog/[slug].html` pairs with `pages/blog/[slug].py`:
-
-```python pages/blog/[slug].py
-from epresso.routing import Route
-
-def get_static_paths():
-    return [Route(path=f"/blog/{p.id}/", params={"slug": p.id}, data=p)
-            for p in site.get_collection("posts")]
-```
-
-`site` is injected. Each `Route` carries `path`, optional `params`, `data` (the
-props passed to the template), and an optional `cache_key` (auto-derived from a
-content entry's digest when absent, so edits re-render only that path).
 
 ## `.ep` single-file routes
 
@@ -68,11 +50,15 @@ def get_static_paths():
     return [Route(path=f"/blog/{p.id}/", params={"slug": p.id}, data=p)
             for p in site.get_collection("posts")]
 ---
-{% extends 'base.html' %}
-{% block content %}<h1>{{ props.title }}</h1>{{ content | safe }}{% endblock %}
+<article><h1>{{ props.title }}</h1>{{ content | safe }}</article>
 ```
 
 A static `.ep` route with no `get_static_paths()` renders once at its default path.
+
+`site` is injected into the frontmatter. A returned `Route` carries `path`,
+optional `params`, `data` (the props passed to the template), and an optional
+`cache_key` (auto-derived from a content entry's digest when absent, so edits
+re-render only that path).
 
 ## Pagination
 
@@ -95,7 +81,6 @@ from epresso.routing import Route
 
 Route(
     path="/blog/hello/",
-    template="pages/blog/[slug].html",   # or template_str for inline .ep bodies
     params={"slug": "hello"},
     data={...},                          # props passed to the template
     content_type="text/html",

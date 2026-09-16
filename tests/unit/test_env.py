@@ -52,7 +52,7 @@ def test_site_load_exposes_env_and_vars(tmp_path):
         "site.toml": '[site]\nname = "T"\nurl = "https://x.com"\n',
         "site.production.toml": '[site]\nurl = "https://prod.x.com"\n',
         ".env.production": 'EP_SESSIONS_API="https://prod/api/sessions.json"\n',
-        "pages/index.html": '<span data-env="{{ env }}">{{ env_vars.EP_SESSIONS_API }}</span>',
+        "pages/index.ep": '---\n---\n<span data-env="{{ env }}">{{ env_vars.EP_SESSIONS_API }}</span>',
     }
     root = _make(files, tmp_path)
     site = Site.load(root, env="production")

@@ -54,6 +54,13 @@ for example, `register_collection` must run in `before_load` so the collection
 is loaded before content, and `add_global`/`add_filter` need the Jinja
 environment, which exists from `on_setup` onward.
 
+## Layers vs plugins
+
+For **components and layouts** that live in another package or repo, prefer
+[layers](layers.md) — a declarative `[layers] use` entry with no code to write.
+Reach for a plugin when you need build-time behaviour: template globals, HTML
+transforms, content collections, markdown extensions. A package can do both.
+
 ## Registering a collection from a plugin
 
 `register_collection` plugs a loader into the same store as `content.config.py`:

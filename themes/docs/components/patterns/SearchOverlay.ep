@@ -4,7 +4,7 @@
 <div id="search-overlay" class="search-overlay" role="dialog" aria-modal="true" aria-label="Search">
     <div class="search-box">
         <div class="search-input-wrap">
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/></svg>
+            <Icon icon="search" />
             <input id="search-input" class="search-input" type="search" placeholder="Search the docs…" autocomplete="off">
         </div>
         <div id="search-results" class="search-results"></div>
@@ -12,400 +12,500 @@
             <span><b>↑↓</b> navigate</span>
             <span><b>Enter</b> open</span>
             <span><b>Esc</b> clear / close</span>
+            <span><b>?</b> shortcuts</span>
         </div>
     </div>
 </div>
 
 <script>
-    (function() {
-        "use strict";
-        var overlay = document.getElementById("search-overlay");
-        var input = document.getElementById("search-input");
-        var results = document.getElementById("search-results");
-        var index = null,
-            loaded = false,
-            allTerms = null;
+(function() {
+    "use strict";
+    var overlay = document.getElementById("search-overlay");
+    var input = document.getElementById("search-input");
+    var results = document.getElementById("search-results");
+    var index = null,
+        loaded = false,
+        allTerms = null;
 
-        function esc(s) {
-            return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
-                return {
-                    "&": "&amp;",
-                    "<": "&lt;",
-                    ">": "&gt;",
-                    '"': "&quot;",
-                    "'": "&#39;"
-                } [c];
-            });
-        }
+    function esc(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
+            return {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;"
+            } [c];
+        });
+    }
 
     // Results are injected at runtime, so they never get the scoped
     // data-epresso-* attribute at build time. Copy the container's scope
     // attribute(s) onto every element inside it so the scoped CSS matches.
-        function scopeResults() {
-            var els = results.querySelectorAll("*");
-            for (var i = 0; i < els.length; i++) {
-                var el = els[i];
-                for (var j = 0; j < results.attributes.length; j++) {
-                    var n = results.attributes[j].name;
-                    if (n.indexOf("data-epresso-") === 0 && !el.hasAttribute(n)) {
-                        el.setAttribute(n, results.attributes[j].value);
-                    }
+    function scopeResults() {
+        var els = results.querySelectorAll("*");
+        for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            for (var j = 0; j < results.attributes.length; j++) {
+                var n = results.attributes[j].name;
+                if (n.indexOf("data-epresso-") === 0 && !el.hasAttribute(n)) {
+                    el.setAttribute(n, results.attributes[j].value);
                 }
             }
         }
+    }
 
-        function tokenize(s) {
-            return String(s || "").toLowerCase().match(/[^\W_]+/g) || [];
-        }
+    function tokenize(s) {
+        return String(s || "").toLowerCase().match(/[^\W_]+/g) || [];
+    }
 
-        function load() {
-            if (loaded) return Promise.resolve();
-            loaded = true;
-            return fetch((window.EPRESSO_BASE || "") + "/search-index.json")
-                .then(function(r) {
-                    return r.json();
-                })
-                .then(function(data) {
-                    index = data;
-                    allTerms = Object.keys(data.index || {});
-                })
-                .catch(function() {
-                    index = null;
-                });
-        }
+    function load() {
+        if (loaded) return Promise.resolve();
+        loaded = true;
+        return fetch((window.EPRESSO_BASE || "") + "/search-index.json")
+            .then(function(r) {
+                return r.json();
+            })
+            .then(function(data) {
+                index = data;
+                allTerms = Object.keys(data.index || {});
+            })
+            .catch(function() {
+                index = null;
+            });
+    }
 
     /* Merge the precomputed per-term scores (BM-25 already applied at build
        time). Exact terms match directly; a term also matches index terms that
        start with it (prefix/partial search, e.g. "mark" → "markdown"). */
-        function score(term, maxResults) {
-            if (!index) return [];
+    var PHRASE_BOOST = 1000; /* real BM-25 sums here run low single/double digits */
+    function score(term, maxResults) {
+        if (!index) return [];
+        var toks = tokenize(term);
+        var scores = {};
+        for (var t = 0; t < toks.length; t++) {
+            var tok = toks[t];
+            var keys = index.index[tok] ? [tok] : [];
+            if (!keys.length) {
+                for (var i = 0; i < allTerms.length; i++) {
+                    if (allTerms[i].indexOf(tok) === 0) keys.push(allTerms[i]);
+                }
+            }
+            for (var m = 0; m < keys.length; m++) {
+                var posts = index.index[keys[m]];
+                for (var p = 0; p < posts.length; p++) {
+                    scores[posts[p][0]] = (scores[posts[p][0]] || 0) + posts[p][1];
+                }
+            }
+        }
+        /* BM-25 is bag-of-words: "components" + "are" scored independently
+           can't outrank a unit that merely repeats "are" over one that
+           actually contains "components are" as written. A literal phrase
+           match is a much stronger signal, so it jumps to the front. */
+        var phrase = term.trim().toLowerCase();
+        if (toks.length > 1) {
+            Object.keys(scores).forEach(function(i) {
+                var u = index.units[+i];
+                var hay = (u.title + " " + u.section + " " + u.text).toLowerCase();
+                if (hay.indexOf(phrase) !== -1) scores[i] += PHRASE_BOOST;
+            });
+        }
+        return Object.keys(scores)
+            .map(function(i) {
+                return {
+                    idx: +i,
+                    score: scores[i]
+                };
+            })
+            .sort(function(a, b) {
+                return b.score - a.score;
+            })
+            .slice(0, maxResults || 12);
+    }
+
+    function snippet(text, term) {
+        var lower = text.toLowerCase();
+        var t = term.trim().toLowerCase();
+        var hit = -1,
+            len = 0;
+        /* Prefer highlighting the whole phrase you typed — fall back to the
+           earliest single token only when the phrase itself isn't there. */
+        if (t) {
+            var p = lower.indexOf(t);
+            if (p >= 0) {
+                hit = p;
+                len = t.length;
+            }
+        }
+        if (hit < 0) {
             var toks = tokenize(term);
-            var scores = {};
-            for (var t = 0; t < toks.length; t++) {
-                var tok = toks[t];
-                var keys = index.index[tok] ? [tok] : [];
-                if (!keys.length) {
-                    for (var i = 0; i < allTerms.length; i++) {
-                        if (allTerms[i].indexOf(tok) === 0) keys.push(allTerms[i]);
-                    }
-                }
-                for (var m = 0; m < keys.length; m++) {
-                    var posts = index.index[keys[m]];
-                    for (var p = 0; p < posts.length; p++) {
-                        scores[posts[p][0]] = (scores[posts[p][0]] || 0) + posts[p][1];
-                    }
-                }
-            }
-            return Object.keys(scores)
-                .map(function(i) {
-                    return {
-                        idx: +i,
-                        score: scores[i]
-                    };
-                })
-                .sort(function(a, b) {
-                    return b.score - a.score;
-                })
-                .slice(0, maxResults || 12);
-        }
-
-        function snippet(text, term) {
-            var toks = tokenize(term),
-                hit = -1,
-                matched = "";
             for (var i = 0; i < toks.length; i++) {
-                var p = text.toLowerCase().indexOf(toks[i]);
-                if (p >= 0 && (hit < 0 || p < hit)) {
-                    hit = p;
-                    matched = toks[i];
+                var p2 = lower.indexOf(toks[i]);
+                if (p2 >= 0 && (hit < 0 || p2 < hit)) {
+                    hit = p2;
+                    len = toks[i].length;
                 }
             }
-            if (hit < 0) {
-                var t = text.length > 140 ? text.slice(0, 140) + "…" : text;
-                return esc(t);
-            }
-            var start = Math.max(0, hit - 60);
-            var end = Math.min(text.length, hit + matched.length + 60);
-            return (start > 0 ? "…" : "") + esc(text.slice(start, hit)) +
-            "<mark>" + esc(text.slice(hit, hit + matched.length)) + "</mark>" +
-            esc(text.slice(hit + matched.length, end)) + (end < text.length ? "…" : "");
         }
-
-        var current = 0;
-
-        function open() {
-            if (!overlay) return;
-            current = -1;
-            overlay.classList.add("open");
-            if (input) {
-                input.value = "";
-                input.focus();
-            }
-            if (results) {
-                results.innerHTML = '<div class="hint">Type to search the docs…</div>';
-                scopeResults();
-            }
+        if (hit < 0) {
+            var t2 = text.length > 140 ? text.slice(0, 140) + "…" : text;
+            return esc(t2);
         }
+        var start = Math.max(0, hit - 60);
+        var end = Math.min(text.length, hit + len + 60);
+        return (start > 0 ? "…" : "") + esc(text.slice(start, hit)) +
+            "<mark>" + esc(text.slice(hit, hit + len)) + "</mark>" +
+            esc(text.slice(hit + len, end)) + (end < text.length ? "…" : "");
+    }
 
-        function close() {
-            if (overlay) overlay.classList.remove("open");
-        }
+    /* Unlike snippet() (one hit + surrounding context), a title is short
+       and shown in full — mark every occurrence of the phrase, or of each
+       token when the phrase itself isn't present. */
+    function highlightAll(text, term) {
+        var lower = text.toLowerCase();
+        var ranges = [];
 
-        function moveCurrent(delta) {
-            var items = results ? results.querySelectorAll(".search-result") : [];
-            if (!items.length) return;
-            current = (current + delta + items.length) % items.length;
-            items.forEach(function(a, i) {
-                a.classList.toggle("active", i === current);
-            });
-            items[current].scrollIntoView({
-                block: "nearest"
-            });
-        }
-
-        function openCurrent(newTab) {
-            var items = results ? results.querySelectorAll(".search-result") : [];
-            if (!items.length) return;
-            var a = items[current >= 0 ? current : 0];
-            if (a) {
-                var href = a.getAttribute("href");
-                if (newTab) window.open(href, "_blank", "noopener");
-                else window.location.href = href;
+        function findAll(needle) {
+            if (!needle) return;
+            var from = 0,
+                p;
+            while ((p = lower.indexOf(needle, from)) !== -1) {
+                ranges.push([p, p + needle.length]);
+                from = p + needle.length;
             }
         }
+        findAll(term.trim().toLowerCase());
+        if (!ranges.length) tokenize(term).forEach(findAll);
+        if (!ranges.length) return esc(text);
 
-        function render(q) {
-            current = -1;
-            var term = q.trim();
-            if (!term) {
-                results.innerHTML = '<div class="hint">Type to search the docs…</div>';
-                scopeResults();
-                return;
-            }
-            if (!index) {
-                results.innerHTML = '<div class="no-results">Search index unavailable.</div>';
-                scopeResults();
-                return;
-            }
-            var hits = score(term, 12);
-            if (!hits.length) {
-                results.innerHTML = '<div class="no-results">No results for “' + esc(term) + '”.</div>';
-                scopeResults();
-                return;
-            }
-            var html = "";
-            hits.forEach(function(h) {
-                var u = index.units[h.idx];
-                var href = (window.EPRESSO_BASE || "") + u.url + (u.anchor ? "#" + u.anchor : "");
-                html += '<a class="search-result" href="' + esc(href) + '">' +
-                '<span class="sr-title">' + esc(u.title) + "</span>" +
-                (u.section ? '<span class="sr-section">' + esc(u.section) + "</span>" : "") +
+        ranges.sort(function(a, b) {
+            return a[0] - b[0];
+        });
+        var merged = [ranges[0]];
+        ranges.slice(1).forEach(function(r) {
+            var last = merged[merged.length - 1];
+            if (r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
+            else merged.push(r);
+        });
+        var out = "",
+            cursor = 0;
+        merged.forEach(function(r) {
+            out += esc(text.slice(cursor, r[0])) + "<mark>" + esc(text.slice(r[0], r[1])) + "</mark>";
+            cursor = r[1];
+        });
+        return out + esc(text.slice(cursor));
+    }
+
+    var current = 0;
+
+    function open() {
+        if (!overlay) return;
+        /* Close any other overlay first (sidebar / menu). */
+        if (window.epressoPanelOpened) window.epressoPanelOpened("search");
+        current = -1;
+        overlay.classList.add("open");
+        if (input) {
+            input.value = "";
+            input.focus();
+        }
+        if (results) {
+            results.innerHTML = '<div class="hint">Type to search the docs…</div>';
+            scopeResults();
+        }
+    }
+
+    function close() {
+        if (overlay) overlay.classList.remove("open");
+    }
+
+    function moveCurrent(delta) {
+        var items = results ? results.querySelectorAll(".search-result") : [];
+        if (!items.length) return;
+        current = (current + delta + items.length) % items.length;
+        items.forEach(function(a, i) {
+            a.classList.toggle("active", i === current);
+        });
+        items[current].scrollIntoView({
+            block: "nearest"
+        });
+    }
+
+    function openCurrent(newTab) {
+        var items = results ? results.querySelectorAll(".search-result") : [];
+        if (!items.length) return;
+        var a = items[current >= 0 ? current : 0];
+        if (a) {
+            var href = a.getAttribute("href");
+            if (newTab) window.open(href, "_blank", "noopener");
+            else window.location.href = href;
+        }
+    }
+
+    function render(q) {
+        current = -1;
+        var term = q.trim();
+        if (!term) {
+            results.innerHTML = '<div class="hint">Type to search the docs…</div>';
+            scopeResults();
+            return;
+        }
+        if (!index) {
+            results.innerHTML = '<div class="no-results">Search index unavailable.</div>';
+            scopeResults();
+            return;
+        }
+        var hits = score(term, 12);
+        if (!hits.length) {
+            results.innerHTML = '<div class="no-results">No results for “' + esc(term) + '”.</div>';
+            scopeResults();
+            return;
+        }
+        var html = "";
+        hits.forEach(function(h) {
+            var u = index.units[h.idx];
+            var href = (window.EPRESSO_BASE || "") + u.url + (u.anchor ? "#" + u.anchor : "");
+            // A page without a <title> falls back to its section, so a
+            // result never starts with an empty heading line.
+            var title = u.title || u.section;
+            var section = u.title ? u.section : "";
+            var head = title ? '<span class="sr-title">' + highlightAll(title, term) + "</span>" : "";
+            // Location line: breadcrumb › on-page section, both in the same
+            // dimmed style — whichever of the two is present.
+            var crumbParts = [];
+            if (u.crumb) crumbParts.push(esc(u.crumb));
+            if (section) crumbParts.push('<span class="sr-section">' + esc(section) + "</span>");
+            var crumb = crumbParts.length ? '<div class="sr-crumb">' + crumbParts.join(' <span class="sr-sep">&gt;</span> ') + "</div>" : "";
+            html += '<a class="search-result" href="' + esc(href) + '">' + head + crumb +
                 '<span class="sr-snippet">' + snippet(u.text, term) + "</span>" +
                 "</a>";
-            });
-            results.innerHTML = html;
-            scopeResults();
-            current = 0;
-            var first = results.querySelector(".search-result");
-            if (first) first.classList.add("active");
-        }
+        });
+        results.innerHTML = html;
+        scopeResults();
+        current = 0;
+        var first = results.querySelector(".search-result");
+        if (first) first.classList.add("active");
+    }
 
-        document.addEventListener("keydown", function(e) {
-            var isOpen = overlay && overlay.classList.contains("open");
-            var k = e.key;
-            if ((e.metaKey || e.ctrlKey) && k.toLowerCase() === "k") {
+    /* Ctrl/⌘K is bound in ShortcutsOverlay.ep (the single owner of global
+       shortcuts); it broadcasts "search". Everything below is the open
+       dialog's own navigation. */
+    document.addEventListener("epresso:shortcut", function(e) {
+        if (e.detail === "search") open();
+    });
+
+    document.addEventListener("keydown", function(e) {
+        var isOpen = overlay && overlay.classList.contains("open");
+        var k = e.key;
+        if (!isOpen) return;
+        var hasResults = results && results.querySelectorAll(".search-result").length > 0;
+        if (k === "ArrowDown") {
+            if (hasResults) {
                 e.preventDefault();
-                open();
-                return;
+                moveCurrent(1);
             }
-            if (!isOpen) return;
-            var hasResults = results && results.querySelectorAll(".search-result").length > 0;
-            if (k === "ArrowDown") {
-                if (hasResults) {
-                    e.preventDefault();
-                    moveCurrent(1);
-                }
-            } else if (k === "ArrowUp") {
-                if (hasResults) {
-                    e.preventDefault();
-                    moveCurrent(-1);
-                }
-            } else if (k === "Enter") {
-                if (current >= 0) {
-                    e.preventDefault();
-                    openCurrent(e.ctrlKey || e.metaKey);
-                } else if (hasResults) {
-                    e.preventDefault();
-                    moveCurrent(1);
-                }
-            } else if (k === "Escape") {
-                if (input && input.value) {
-                    input.value = "";
-                    render("");
-                } else close();
+        } else if (k === "ArrowUp") {
+            if (hasResults) {
+                e.preventDefault();
+                moveCurrent(-1);
             }
-        });
-        if (overlay) overlay.addEventListener("click", function(e) {
-            if (e.target === overlay) close();
-        });
-        if (results) {
-            results.addEventListener("mouseover", function(e) {
-                var t = e.target;
-                var item = t && t.closest ? t.closest(".search-result") : null;
-                if (!item) return;
-                var items = results.querySelectorAll(".search-result");
-                var idx = Array.prototype.indexOf.call(items, item);
-                if (idx >= 0 && idx !== current) {
-                    current = idx;
-                    items.forEach(function(a, i) {
-                        a.classList.toggle("active", i === current);
-                    });
-                }
-            });
+        } else if (k === "Enter") {
+            if (current >= 0) {
+                e.preventDefault();
+                openCurrent(e.ctrlKey || e.metaKey);
+            } else if (hasResults) {
+                e.preventDefault();
+                moveCurrent(1);
+            }
+        } else if (k === "Escape") {
+            if (input && input.value) {
+                input.value = "";
+                render("");
+            } else close();
         }
-        if (input) {
-            input.addEventListener("input", function() {
-                load().then(function() {
-                    render(input.value);
+    });
+    if (overlay) overlay.addEventListener("click", function(e) {
+        if (e.target === overlay) close();
+    });
+    if (results) {
+        results.addEventListener("mouseover", function(e) {
+            var t = e.target;
+            var item = t && t.closest ? t.closest(".search-result") : null;
+            if (!item) return;
+            var items = results.querySelectorAll(".search-result");
+            var idx = Array.prototype.indexOf.call(items, item);
+            if (idx >= 0 && idx !== current) {
+                current = idx;
+                items.forEach(function(a, i) {
+                    a.classList.toggle("active", i === current);
                 });
+            }
+        });
+    }
+    if (input) {
+        input.addEventListener("input", function() {
+            load().then(function() {
+                render(input.value);
             });
-        }
-    })();
+        });
+    }
+
+    /* The header's search button opens this overlay: owned here so the panel
+       can coordinate with the other overlays. */
+    document.addEventListener("click", function(e) {
+        var btn = e.target.closest ? e.target.closest("#search-open") : null;
+        if (btn) open();
+    });
+
+    document.addEventListener("epresso:panel-open", function(e) {
+        if (e.detail !== "search") close();
+    });
+})();
 </script>
 
 <style>
-    .search-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 100;
-        display: none;
-        align-items: flex-start;
-        justify-content: center;
-        padding-top: 12vh;
-        background: rgba(10, 12, 18, 0.55);
-        backdrop-filter: blur(2px);
-    }
+.search-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-overlay);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
+    background: rgba(10, 12, 18, 0.55);
+    backdrop-filter: blur(2px);
+}
 
-    .search-overlay.open {
-        display: flex;
-    }
+.search-overlay.open {
+    display: flex;
+}
 
-    .search-box {
-        width: min(38rem, 92vw);
-        max-height: calc(100vh - 24vh);
+.search-box {
+    width: min(38rem, 92vw);
+    max-height: calc(100vh - 24vh);
+    max-height: calc(100dvh - 24dvh);
     /* leave room for the 12vh top/bottom gutters */
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow-lg);
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-    }
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
 
-    .search-input-wrap {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);
-        padding: var(--space-md) var(--space-lg);
-        border-bottom: 1px solid var(--line);
-    }
+.search-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--line);
+}
 
-    .search-input-wrap svg {
-        width: 18px;
-        height: 18px;
-        color: var(--muted);
-        flex: 0 0 auto;
-    }
+.search-input-wrap svg {
+    width: 18px;
+    height: 18px;
+    color: var(--muted);
+    flex: 0 0 auto;
+}
 
-    .search-input {
-        flex: 1 1 auto;
-        border: none;
-        outline: none;
-        background: transparent;
-        color: var(--ink);
-        font: var(--text-body);
-    }
+.search-input {
+    flex: 1 1 auto;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--ink);
+    font: var(--text-body);
+}
 
-    .search-input::placeholder {
-        color: var(--muted);
-    }
+.search-input::placeholder {
+    color: var(--muted);
+}
 
-    .search-results {
-        overflow-y: auto;
-        min-height: 0;
+.search-results {
+    overflow-y: auto;
+    min-height: 0;
     /* let it shrink inside the flex column so it scrolls */
-    }
+}
 
-    .search-results .hint,
-    .search-results .no-results {
-        padding: var(--space-md) var(--space-lg);
-        color: var(--muted);
-        font-size: 0.9rem;
-    }
+.search-results .hint,
+.search-results .no-results {
+    padding: var(--space-md) var(--space-lg);
+    color: var(--muted);
+    font-size: 0.9rem;
+}
 
-    .search-result {
-        display: block;
-        padding: var(--space-sm) var(--space-lg);
-        color: var(--ink);
-        border-left: 2px solid transparent;
-    }
+.search-result {
+    display: block;
+    padding: var(--space-sm) var(--space-lg);
+    color: var(--ink);
+    border-left: 2px solid transparent;
+}
 
-    .search-result:hover {
-        text-decoration: none;
-    }
+.search-result:hover {
+    text-decoration: none;
+}
 
-    .search-result.active {
-        background: var(--accent-soft);
-        border-left-color: var(--accent);
-        text-decoration: none;
-    }
+.search-result.active {
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    text-decoration: none;
+}
 
-    .search-result .sr-title {
-        font-size: 1.15rem;
-        font-weight: 600;
-        font-family: var(--font-display);
-        letter-spacing: -0.01em;
-    }
+.search-result .sr-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+}
 
-    .search-result .sr-section {
-        font-size: 0.9rem;
-        color: var(--accent);
-        font-weight: 500;
-    }
+.search-result .sr-crumb {
+    margin-top: 0.15rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
 
-    .search-result .sr-snippet {
-        display: block;
-        font-size: 0.92rem;
-        color: var(--muted);
-        margin-top: 0.2rem;
-        line-height: 1.5;
-    }
+/* sr-section shares the crumb's dimmed style — it's on the same line. */
+.search-result .sr-section {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
 
-    .search-result .sr-snippet mark {
-        background: var(--accent-soft);
-        color: var(--accent-strong);
-        border-radius: 2px;
-        padding: 0 1px;
-    }
+.search-result .sr-sep {
+    opacity: 0.55;
+}
 
-    .search-result.active .sr-snippet mark {
-        background: var(--accent-bg);
-        color: var(--accent-ink);
-    }
+.search-result .sr-snippet {
+    display: block;
+    font-size: 0.92rem;
+    color: var(--muted);
+    margin-top: 0.2rem;
+    line-height: 1.5;
+}
+
+.search-result mark {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+.search-result.active mark {
+    background: var(--accent-bg);
+    color: var(--accent-ink);
+}
 
 
-    .search-hint {
-        display: flex;
-        gap: var(--space-lg);
-        padding: var(--space-sm) var(--space-lg);
-        border-top: 1px solid var(--line);
-        color: var(--muted);
-        font-size: 0.72rem;
-    }
+.search-hint {
+    display: flex;
+    gap: var(--space-lg);
+    padding: var(--space-sm) var(--space-lg);
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.72rem;
+}
 
-    .search-hint b {
-        color: var(--ink);
-        font-weight: 600;
-    }
+.search-hint b {
+    color: var(--ink);
+    font-weight: 600;
+}
 </style>

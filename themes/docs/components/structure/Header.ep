@@ -1,118 +1,317 @@
 ---
 ---
 
-<header class="site-header">
-    <div class="site-header-inner">
-        <a class="brand" href="{{ url('/') }}"><span class="brand-logo" role="img" aria-label="epresso"></span></a>
-        <nav class="header-nav">
-            <a class="header-home" href="{{ url('/') }}">Home</a>
-        </nav>
-        <div class="header-actions">
-            <SearchButton />
-            <ThemeToggle />
-            <GitHubLink />
+<Fragment>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a class="brand{% if site.config.theme.get('logo') %} brand--logo{% endif %}" href="{{ url('/') }}">
+                {% if site.config.theme.get('logo') %}
+                    <img class="brand-logo" src="/{{ site.config.theme.logo }}" alt="{{ site.config.site.name }}" />
+                {% else %}
+                    <span class="brand-logo" role="img" aria-label="epresso"></span>
+                {% endif %}
+            </a>
+            <nav class="header-nav">
+                <div class="nav-links" id="nav-menu">
+                    <a class="header-home" href="{{ url('/') }}">Home</a>
+                </div>
+            </nav>
+            <div class="header-actions">
+                <SearchButton />
+                <GitHubLink />
+                <SidebarToggle />
+            </div>
+            <button class="nav-toggle" id="nav-toggle" type="button" aria-controls="nav-menu" aria-expanded="false" aria-label="Open menu">
+                <Icon icon="menu" size="20" />
+            </button>
         </div>
-    </div>
-</header>
+        <div class="nav-scrim" aria-hidden="true"></div>
+    </header>
+</Fragment>
+
+<script>
+(function() {
+    "use strict";
+    if (window.__epressoNavToggle) return;
+    window.__epressoNavToggle = true;
+    var btn = document.getElementById("nav-toggle");
+    var menu = document.getElementById("nav-menu");
+    var scrim = document.querySelector(".nav-scrim");
+    if (!btn || !menu) return;
+    var mq = window.matchMedia("(max-width: 768px)");
+
+    function setOpen(open) {
+        menu.classList.toggle("is-open", open);
+        if (scrim) scrim.classList.toggle("is-open", open);
+        /* Keep closed off-canvas content out of the tab order. */
+        menu.inert = mq.matches && !open;
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+        btn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        if (open && window.epressoPanelOpened) window.epressoPanelOpened("menu");
+    }
+    document.addEventListener("epresso:panel-open", function(e) {
+        if (e.detail !== "menu") setOpen(false);
+    });
+    btn.addEventListener("click", function() {
+        setOpen(!menu.classList.contains("is-open"));
+    });
+    if (scrim) scrim.addEventListener("click", function() {
+        setOpen(false);
+    });
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") setOpen(false);
+    });
+    menu.addEventListener("click", function(e) {
+        var a = e.target.closest ? e.target.closest("a") : null;
+        if (a) setOpen(false);
+    });
+    document.addEventListener("click", function(e) {
+        if (!menu.classList.contains("is-open")) return;
+        if (e.target.closest && (e.target.closest("#nav-toggle") || e.target.closest("#nav-menu") || e.target.closest(".nav-scrim"))) return;
+        setOpen(false);
+    });
+
+    function syncState() {
+        if (!mq.matches && menu.classList.contains("is-open")) setOpen(false);
+        menu.inert = mq.matches && !menu.classList.contains("is-open");
+    }
+    syncState();
+    if (mq.addEventListener) mq.addEventListener("change", syncState);
+})();
+</script>
 
 <style>
-    .site-header {
-        position: sticky;
-        top: 0;
-        z-index: 40;
-        background: color-mix(in srgb, var(--surface) 82%, transparent);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid var(--line);
-    }
+.site-header {
+    /* Query container for the header's own layout + action components. */
+    container: header / inline-size;
+    position: sticky;
+    top: 0;
+    z-index: var(--z-header);
+    /* --header-h is the TOTAL height, bottom border included (border-box), so
+           anything positioned at top: var(--header-h) sits exactly below it. */
+    height: var(--header-h);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+}
 
+.site-header-inner {
+    max-width: 80rem;
+    margin: 0 auto;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    height: 100%;
+    display: grid;
+    align-items: center;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
+    grid-template-areas: "logo nav actions";
+}
+
+@container header (max-width: 1024px) {
     .site-header-inner {
-        max-width: 80rem;
-        margin: 0 auto;
-        height: var(--header-h);
-        display: grid;
-        align-items: center;
-        grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
+        grid-template-columns: auto 1fr auto;
         grid-template-areas: "logo nav actions";
     }
+}
 
-    @media (min-width: 1281px) {
-        .site-header-inner {
-            grid-template-columns: var(--sidebar-w) minmax(0, 1fr) auto;
-            grid-template-areas: "logo nav actions";
-        }
-    }
-
-    @media (max-width: 860px) {
-        .site-header-inner {
-            grid-template-columns: auto 1fr auto;
-            grid-template-areas: "logo nav actions";
-        }
-    }
-
-    .brand {
-        grid-area: logo;
-        padding: 8px var(--space-md) 0;
+.brand {
+    grid-area: logo;
+    padding: 8px var(--space-md) 0;
     /* left/right only, same as .sidebar */
-        font: 600 1.05rem/1 var(--font-display);
-        letter-spacing: -0.01em;
-        color: var(--ink);
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-sm);
-    }
+    font: 600 1.05rem/1 var(--font-display);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
 
-    .brand::before {
-        margin: 0 0 12px 0px;
-        content: "";
-        width: 0.5rem;
-        height: 0.5rem;
-        border-radius: 50%;
-        background: var(--epresso-env-dot, var(--accent));
-    }
+.brand::before {
+    margin: 0 0 12px 0px;
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--epresso-env-dot, var(--accent));
+}
 
-    .brand:hover {
-        text-decoration: none;
-    }
+.brand:hover {
+    text-decoration: none;
+}
 
 /* The epresso wordmark svg is monochrome (#f6f4f1, for the dark header).
        An external <img> can't be recolored by page CSS, so render it as a mask
        over a theme-aware background color instead: #1b1b1b on light, #f6f4f1 on
-       dark (color-scheme is flipped by the theme toggle). */
-    .brand-logo {
-        display: block;
-        height: calc(var(--header-h) * 0.52); /* ~29px at 56px header; width follows 16:5 */
-        aspect-ratio: 16 / 5;
+       dark (color-scheme follows the OS, or the dev toolbar's override). */
+.brand-logo {
+    display: block;
+    height: calc(var(--header-h) * 0.52);
+    /* ~29px at 56px header; width follows 16:5 */
+    aspect-ratio: 16 / 5;
     /* epresso.svg intrinsic 320x100 */
-        background-color: light-dark(#1b1b1b, #f6f4f1);
-        -webkit-mask: url("/epresso.svg") no-repeat center / 100% 100%;
-        mask: url("/epresso.svg") no-repeat center / 100% 100%;
+    background-color: var(--brand-logo);
+    -webkit-mask: url("/epresso.svg") no-repeat center / 100% 100%;
+    mask: url("/epresso.svg") no-repeat center / 100% 100%;
+}
+
+/* Optional user logo (site.config.theme.logo): use the file as the header
+       image and hide the env-dot ::before + the default mask wordmark. */
+.brand--logo::before {
+    display: none;
+}
+
+.brand--logo .brand-logo {
+    width: auto;
+    aspect-ratio: auto;
+    background: none;
+    -webkit-mask: none;
+    mask: none;
+}
+
+.header-nav {
+    grid-area: nav;
+    justify-self: start;
+    padding: 0 var(--space-xl) 0 clamp(var(--space-lg), 4vw, var(--space-3xl));
+    /* same left/right as .content */
+}
+
+.header-home {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.header-home:hover {
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.header-actions {
+    grid-area: actions;
+    justify-self: start;
+    padding: 0 var(--space-md);
+    /* same left/right as .toc--rail */
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.nav-toggle:hover {
+    color: var(--ink);
+    background: var(--accent-soft);
+    border-color: var(--line);
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+}
+
+.nav-scrim {
+    display: none;
+}
+
+@container header (max-width: 768px) {
+    .site-header-inner {
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas: "menu logo actions";
+    }
+
+    /* Brand sits right after the menu toggle (not centred). */
+    .brand {
+        grid-area: logo;
+        justify-self: start;
     }
 
     .header-nav {
-        grid-area: nav;
+        display: contents;
+    }
+
+    .nav-toggle {
+        display: inline-flex;
+        grid-area: menu;
         justify-self: start;
-        padding: 0 var(--space-xl) 0 clamp(var(--space-lg), 4vw, var(--space-3xl));
-    /* same left/right as .content */
-    }
-
-    .header-home {
-        color: var(--muted);
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .header-home:hover {
-        color: var(--ink);
-        text-decoration: none;
+        margin-left: var(--space-md);
     }
 
     .header-actions {
         grid-area: actions;
-        justify-self: start;
-        padding: 0 var(--space-md);
-    /* same left/right as .toc--rail */
-        display: flex;
-        align-items: center;
-        gap: var(--space-xs);
+        justify-self: end;
     }
+
+    /* Same treatment as the sidebar: a drawer sliding in from the left, below
+           the header so the hamburger (its toggle) stays visible and no close
+           button is needed. NOTE: position:fixed resolves against the header
+           (containment: layout) — it is pinned at 0/0 and full width, so the
+           panel still lands on the viewport's left edge. */
+    .nav-links {
+        position: fixed;
+        top: var(--header-h);
+        left: 0;
+        height: calc(100vh - var(--header-h));
+        height: calc(100dvh - var(--header-h));
+        width: min(20rem, 85vw);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0;
+        padding: var(--space-md);
+        /* same surface as the sidebar drawer */
+        background: var(--bg);
+        border-right: 1px solid var(--line);
+        z-index: var(--z-drawer);
+        transform: translateX(-100%);
+        transition: transform var(--dur-normal) var(--ease);
+    }
+
+    .nav-links.is-open {
+        transform: translateX(0);
+    }
+
+    .nav-scrim {
+        display: block;
+        position: fixed;
+        /* the header stays above/undimmed; the scrim covers the content area */
+        top: var(--header-h);
+        left: 0;
+        right: 0;
+        height: calc(100vh - var(--header-h));
+        height: calc(100dvh - var(--header-h));
+        z-index: var(--z-scrim);
+        background: rgb(0 0 0 / 0.4);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--dur-fast) var(--ease);
+    }
+
+    .nav-scrim.is-open {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .nav-links .header-home {
+        padding: var(--space-sm) 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-links {
+        transition: none;
+    }
+}
 </style>

@@ -1,23 +1,22 @@
 """Template engine tests — curated globals, layouts, error handling."""
 
+from jinja2 import TemplateNotFound
 from markupsafe import Markup
 
 from epresso.errors import TemplateError
-from epresso.templates import render_markdown_page, render_template
+from epresso.templates import render_markdown_page
 
 
 def test_url_helper(site):
     site._do_load()
-    html = render_template(site.env, "layouts/base.html", {"page": {}})
+    html = site.env.get_template("Base.ep").render({"props": {"title": "T"}})
     assert "<html>" in html
 
 
 def test_curated_globals_in_template(site):
     site._do_load()
-    out = render_template(
-        site.env,
-        "layouts/base.html",
-        {"page": {"title": "T"}, "content": Markup("x")},
+    out = site.env.get_template("Base.ep").render(
+        {"props": {"title": "T"}, "content": Markup("x")}
     )
     assert "<title>T</title>" in out
 
@@ -43,15 +42,14 @@ def test_get_collection_get_entry_via_template(site):
     assert "A" in out
 
 
-def test_markdown_page_block_layout(site, tmp_path):
+def test_markdown_page_layout_component(site, tmp_path):
     site._do_load()
-    layout = "layouts/base.html"
     html = render_markdown_page(
         site.env,
         title="P",
         content_html="<p>hi</p>",
         frontmatter={"title": "P"},
-        layout=layout,
+        layout="Base",
         site=site,
         route_path="/p/",
     )
@@ -76,7 +74,24 @@ def test_markdown_page_no_layout(site):
 def test_unknown_template_raises(site):
     site._do_load()
     try:
-        render_template(site.env, "does/not/exist.html", {})
-        raise AssertionError("expected TemplateError")
-    except TemplateError:
+        site.env.get_template("does/not/exist.ep")
+        raise AssertionError("expected TemplateNotFound")
+    except TemplateNotFound:
         pass
+
+
+def test_html_layout_is_rejected(site):
+    site._do_load()
+    try:
+        render_markdown_page(
+            site.env,
+            title="P",
+            content_html="<p>x</p>",
+            frontmatter={},
+            layout="base.html",
+            site=site,
+            route_path="/p/",
+        )
+        raise AssertionError("expected TemplateError")
+    except TemplateError as e:
+        assert ".html layouts are not supported" in str(e)

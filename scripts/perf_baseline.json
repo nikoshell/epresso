@@ -1,0 +1,9 @@
+{
+  "theme": "themes/docs",
+  "python": "3.12",
+  "reference_seconds": 0.257129,
+  "build_seconds": 3.0055,
+  "build_median_seconds": 3.1514,
+  "ratio": 11.6888,
+  "created": "2026-09-15"
+}

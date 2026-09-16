@@ -116,6 +116,60 @@ def copy_docs_assets(source: Path, public_base: Path, docs_dir: str) -> None:
             shutil.copy2(src_f, out)
 
 
+def _set_theme_key(tmp: Path, key: str, value: str) -> None:
+    """Write/update a ``[theme] <key> = "..."`` in the temp project's site.toml."""
+    p = tmp / "site.toml"
+    if not p.exists():
+        return
+    s = p.read_text(encoding="utf-8")
+    val = value.replace("\\", "\\\\").replace('"', '\\"')
+    if re.search(r"(?m)^\[theme\]\s*$", s):
+        if re.search(rf"(?m)^{re.escape(key)}\s*=", s):
+            s = re.sub(rf"(?m)^{re.escape(key)}\s*=.*$", f'{key} = "{val}"', s, count=1)
+        else:
+            s = re.sub(r"(?m)^\[theme\]\s*$", f'[theme]\n{key} = "{val}"', s, count=1)
+    else:
+        s += f"\n[theme]\n{key} = \"{val}\"\n"
+    p.write_text(s, encoding="utf-8")
+
+
+def _apply_branding(tmp: Path, source: Path) -> None:
+    """Apply optional branding from the docs source root, if present.
+
+    ``favicon.ico`` replaces the theme default; ``styles.css`` is appended to the
+    theme's global.css (so its CSS-variable/color overrides win); ``logo.svg``
+    becomes the header logo (removing the env dot / default wordmark).
+    """
+
+    def _copy_if(name: str, dest: Path) -> None:
+        src = source / name
+        if src.is_file():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
+    _copy_if("favicon.ico", tmp / "public" / "favicon.ico")
+
+    extra = None
+    for name in ("styles.css", "style.css"):
+        cand = source / name
+        if cand.is_file():
+            extra = cand
+            break
+    if extra is not None:
+        gcss = tmp / "styles" / "global.css"
+        if gcss.exists():
+            with gcss.open("a", encoding="utf-8") as fh:
+                fh.write("\n\n/* docs styles.css override */\n")
+                fh.write(extra.read_text(encoding="utf-8"))
+
+    if (source / "logo.svg").is_file():
+        # Copy the logo plus any variants (logo-light.svg, ...) so a stylesheet
+        # can swap them per color scheme.
+        for logo in sorted(source.glob("logo*.svg")):
+            _copy_if(logo.name, tmp / "public" / logo.name)
+        _set_theme_key(tmp, "logo", "logo.svg")
+
+
 def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Path:
     """Build a temp epresso project that renders a bare Markdown dir.
 
@@ -144,6 +198,8 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     copy_docs_assets(source, tmp / "public" / "content" / docs_dir, docs_dir)
     # Point the theme's docs collection at the copy via site.toml (no env).
     patch_site_toml(tmp, port, source, docs_base=docs_dir_path.resolve())
+    # Optional branding (logo.svg / favicon.ico / styles.css) from the source root.
+    _apply_branding(tmp, source)
     return tmp
 
 

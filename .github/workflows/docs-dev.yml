@@ -1,0 +1,126 @@
+# Publish the development (`epresso-dev` main) docs to the preview Pages repo.
+#
+# The dev repository has no GitHub Pages site of its own, so this builds its
+# docs and publishes them to the dedicated preview repository under `dev/`:
+#
+#   https://<preview-host>/dev/
+#
+# Unlike the PR flow, this runs directly on a trusted `push` to main (the code
+# is the repository's own main branch), so it can use the deployment token
+# without the build/publish split.
+#
+# Repository variables:
+#   DOCS_PREVIEW_REPO  owner/repo of the preview Pages repository (REQUIRED)
+#   DOCS_PREVIEW_URL   full base URL previews are served from (REQUIRED)
+#   DOCS_PREVIEW_BRANCH branch to publish to (default: gh-pages)
+# Secret:
+#   DOCS_PREVIEW_TOKEN  contents:write on DOCS_PREVIEW_REPO
+name: Docs Dev Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-dev-publish
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    # Only the development repository publishes a `dev/` preview; the
+    # production repository is skipped (and would lack the secret anyway).
+    if: ${{ github.repository == (vars.DEV_REPO || 'nikoshell/epresso-dev') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Compute dev preview base
+        id: base
+        env:
+          PREVIEW_URL: ${{ vars.DOCS_PREVIEW_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PREVIEW_URL:-}" ]; then
+            echo "::error::Repository variable DOCS_PREVIEW_URL is not set."
+            exit 1
+          fi
+          url="${PREVIEW_URL%/}"
+          prefix="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.urlparse(sys.argv[1]).path.rstrip("/"))' "$url")"
+          echo "base=${prefix}/dev/" >> "$GITHUB_OUTPUT"
+
+      - name: Build docs site
+        env:
+          EPRESSO_BASE: ${{ steps.base.outputs.base }}
+        run: uv run --project . epresso build themes/docs
+
+      - name: Validate configuration
+        env:
+          PREVIEW_REPO: ${{ vars.DOCS_PREVIEW_REPO }}
+          PREVIEW_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for v in PREVIEW_REPO PREVIEW_TOKEN; do
+            if [ -z "${!v:-}" ]; then echo "::error::Missing required value: $v"; missing=1; fi
+          done
+          [ "$missing" = "0" ] || exit 1
+
+      - name: Publish dev/ to the preview repository
+        env:
+          PREVIEW_REPO: ${{ vars.DOCS_PREVIEW_REPO }}
+          PREVIEW_BRANCH: ${{ vars.DOCS_PREVIEW_BRANCH }}
+          PREVIEW_TOKEN: ${{ secrets.DOCS_PREVIEW_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch="${PREVIEW_BRANCH:-gh-pages}"
+
+          git config --global url."https://x-access-token:${PREVIEW_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          rm -rf preview-repo
+          git clone --depth 1 --branch "$branch" \
+            "https://github.com/${PREVIEW_REPO}.git" preview-repo 2>/dev/null \
+            || {
+              mkdir -p preview-repo
+              git -C preview-repo init -q
+              git -C preview-repo checkout -q --orphan "$branch"
+              git -C preview-repo remote add origin "https://github.com/${PREVIEW_REPO}.git"
+            }
+
+          cd preview-repo
+          rm -rf dev
+          mkdir -p dev
+          cp -a "${GITHUB_WORKSPACE}/themes/docs/dist/." dev/
+          rm -rf dev/.git
+          : > .nojekyll # keep underscore-prefixed asset dirs (Jekyll would drop them)
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+          git commit -q -m "docs: update dev preview"
+
+          for attempt in 1 2 3; do
+            if git push origin "$branch" 2>/dev/null; then
+              exit 0
+            fi
+            echo "Push attempt ${attempt} failed; rebasing and retrying."
+            git pull --rebase origin "$branch" || true
+            sleep 3
+          done
+          echo "::error::Failed to push dev preview after retries."
+          exit 1

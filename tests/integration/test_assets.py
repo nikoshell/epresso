@@ -24,8 +24,7 @@ def test_asset_resolves_to_hashed_url(tmp_path):
     root, site = _make(
         {
             "assets/css/main.css": "body { color: red; }\n",
-            "pages/index.html": "{% extends 'layouts/base.html' %}{% block content %}hi{% endblock %}",
-            "templates/layouts/base.html": "<link rel=stylesheet href=\"{{ asset('css/main.css') }}\">{% block content %}{% endblock %}",
+            "pages/index.ep": "<link rel=\"stylesheet\" href=\"{{ asset('css/main.css') }}\">",
         }
     )
     site.build()
@@ -44,7 +43,7 @@ def test_hash_changes_with_content(tmp_path):
     root, site = _make(
         {
             "assets/js/app.js": "console.log(1);\n",
-            "pages/index.html": "x",
+            "pages/index.ep": "---\n---\nx",
         }
     )
     # register the asset via resolve
@@ -76,7 +75,7 @@ def test_asset_without_hash_config(tmp_path):
         {
             "site.toml": "[assets]\nhash = false\n",
             "assets/css/a.css": "a{}\n",
-            "pages/index.html": "x",
+            "pages/index.ep": "---\n---\nx",
         }
     )
     url = site.assets.resolve("css/a.css")
@@ -88,7 +87,7 @@ def test_esbuild_missing_falls_back_to_copy(tmp_path, monkeypatch):
     root, site = _make(
         {
             "assets/js/main.js": "console.log('hi');\n",
-            "pages/index.html": "x",
+            "pages/index.ep": "---\n---\nx",
         }
     )
     site.config.assets.js = ["js/main.js"]
