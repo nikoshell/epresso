@@ -213,11 +213,18 @@ class CuratedGlobals:
 
 def bind_globals(env: Environment, site: Any) -> None:
     from . import __version__  # local import: the package is fully loaded by now
+    from .classes import cn
+    from .variants import Variant, VariantProps, resolve_variants, spread
 
     g = CuratedGlobals(site)
     env.globals.update(
         {
             "site": site,
+            "cn": cn,
+            "Variant": Variant,
+            "VariantProps": VariantProps,
+            "resolve_variants": resolve_variants,
+            "spread": spread,  # renders `props.attrs` as attributes
             "_render_session": site.session,  # side-band render output (scoped CSS + scripts)
             "url": g.url,
             "epresso_version": __version__,
@@ -251,8 +258,7 @@ def _layout_component_name(layout: str) -> str:
     if name.lower().endswith(".html"):
         raise TemplateError(
             f"layout {layout!r}: .html layouts are not supported",
-            fix="use a layout component — a layouts/<Name>.ep file with <slot/>, "
-            "referenced as `layout: <Name>`",
+            fix="use a layout component — a layouts/<Name>.ep file with <slot/>, referenced as `layout: <Name>`",
         )
     if name.endswith(".ep"):
         name = name[:-3]

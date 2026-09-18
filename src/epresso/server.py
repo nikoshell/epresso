@@ -99,7 +99,10 @@ class DevServer:
 
             html = devtoolbar.inject(html, self.site, candidate)
             html = _inject_reload(html)
-        return HTMLResponse(html, media_type=content_type)
+        # Dev renders on every request, so a cached copy is always the wrong one:
+        # without this a browser can keep showing a page from before an edit (or
+        # from a moment when a template was half-written) long after a reload.
+        return HTMLResponse(html, media_type=content_type, headers={"Cache-Control": "no-store"})
 
     def _dev_search_index(self):
         """Lazily build + cache the search index for the dev server."""
@@ -129,7 +132,7 @@ class DevServer:
             self.site.images.build(self.site.config.dir_output())
 
     def _static_file(self, path: str) -> Response | None:
-        from starlette.responses import FileResponse, Response
+        from starlette.responses import FileResponse, PlainTextResponse, Response
 
         rel = path.lstrip("/")
         # Scoped CSS and page scripts are build-time outputs; serve the last
@@ -139,7 +142,24 @@ class DevServer:
             if art.is_file() and self.site.config.dir_output().resolve() in art.parents:
                 # Unversioned dev bundles are rewritten in place on CSS edits; tell
                 # the browser to revalidate so live reload picks up changes.
-                return FileResponse(art, headers={"Cache-Control": "no-cache"})
+                #
+                # Read the bytes here instead of handing Starlette a FileResponse:
+                # a concurrent `epresso build` wipes dist/, and FileResponse opens
+                # the file while streaming — a delete between the check above and
+                # the read escaped as FileNotFoundError, i.e. a 500 for the
+                # <script> request and with it every page's JS.
+                try:
+                    body = art.read_bytes()
+                except OSError:
+                    body = None
+                if body is not None:
+                    media = "text/css" if art.suffix == ".css" else "text/javascript"
+                    return Response(body, media_type=media, headers={"Cache-Control": "no-cache"})
+            # Never fall through to the HTML 404 page for a build artifact: a
+            # `<script src>` answered with an HTML body is a syntax error in the
+            # browser, which hides the real cause (a missing file) behind a dead
+            # module. Answer with a plain 404 instead.
+            return PlainTextResponse("not found", status_code=404)
         # Generated images (WebP from the image pipeline) live under dist/images/
         if rel.startswith("images/"):
             img = (self.site.config.dir_output() / rel).resolve()
@@ -175,7 +195,15 @@ class DevServer:
                 if ass.suffix.lower() == ".css" and rel2 in self.site.config.assets.css:
                     processed = self._process_css_for_dev(ass)
                     if processed is not None:
-                        return Response(content=processed, media_type="text/css")
+                        # Dev re-processes this on every request, and the result changes
+                        # with the source — but nothing here is a validator, so without
+                        # this a browser can keep serving a stylesheet from before an
+                        # edit (a CSS fix then looks like it "did not work").
+                        return Response(
+                            content=processed,
+                            media_type="text/css",
+                            headers={"Cache-Control": "no-cache"},
+                        )
                 return FileResponse(ass)
         # Fall back to the bundled default favicon so /favicon.ico never 404s.
         if rel == "favicon.ico":

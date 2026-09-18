@@ -60,7 +60,7 @@ def test_manifest_points_at_real_files():
     props = pkg["contributes"]["configuration"]["properties"]
     for setting in ("epresso.format.executablePath", "epresso.lsp.enable", "epresso.lsp.executablePath"):
         assert setting in props
-    assert pkg["contributes"]["configurationDefaults"]["[epresso]"]["editor.defaultFormatter"] == "epresso.epresso"
+    assert pkg["contributes"]["configurationDefaults"]["[epresso]"]["editor.defaultFormatter"] == "nikoshell.epresso"
     # extension.js requires the hand-rolled LSP client next to it
     assert (VSCODE / "lsp.js").is_file()
 

@@ -230,6 +230,36 @@ def test_slot_attribute_extracts_nested_subtree():
     assert "slot=" not in html
 
 
+def test_data_slot_attribute_is_not_a_slot_marker():
+    """`data-slot="…"` / `aria-slot="…"` are data attributes, not slot markers.
+
+    `\b` alone matches between `-` and `slot`, so a prefixed attribute used to be
+    extracted (and its element dropped); the marker regex now guards the prefix.
+    """
+    from epresso.components import _extract_slots
+
+    content = '<div data-slot="track"><Inner /></div>'
+    out, slots = _extract_slots(content)
+    assert slots == {}
+    assert out == content
+
+    # A real `slot=` after a `data-slot=` still wins (it is not shadowed).
+    out, slots = _extract_slots('<i data-slot="track" slot="side">x</i>')
+    assert slots == {"side": '<i data-slot="track">x</i>'}
+    assert out == ""
+
+
+def test_component_inside_a_data_slot_element_renders():
+    html = _render(
+        {
+            "components/Inner.ep": "---\n---\n<i>inner</i>",
+            "components/Wrap.ep": '---\n---\n<div class="wrap"><slot /></div>',
+            "pages/index.ep": '---\n---\n<Wrap><div data-slot="track"><Inner /></div></Wrap>',
+        }
+    )
+    assert '<div class="wrap"><div data-slot="track"><i>inner</i></div></div>' in html
+
+
 def test_slotless_fragment_renders_nothing():
     html = _render(
         {

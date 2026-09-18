@@ -219,12 +219,16 @@ class RenderSession:
         """
         warn = warn or self.warnings.append
         for h in sorted(self.scripts):
-            if h in self._scripts_written:
+            out = out_dir / "_epresso" / "scripts" / f"{h}.js"
+            # `scripts_written` means "already on disk". Re-check the file rather than
+            # trusting the set: `epresso build` wipes dist/ (site.build(clean=True)) and a
+            # dev server serving the same directory would otherwise keep injecting a URL
+            # it never rewrites, so every page's JS 404s until the server restarts.
+            if h in self._scripts_written and out.is_file():
                 continue
             src = cache_dir / "scripts" / f"{h}.js"
             src.parent.mkdir(parents=True, exist_ok=True)
             src.write_text(self.scripts[h], encoding="utf-8")
-            out = out_dir / "_epresso" / "scripts" / f"{h}.js"
             out.parent.mkdir(parents=True, exist_ok=True)
             result, detail = bundle_js([str(src)], outfile=out)
             if result == "ok":
@@ -232,5 +236,9 @@ class RenderSession:
                 continue
             if result == "failed":
                 warn(f"script {h} esbuild failed: {detail}; writing raw")
+            # Re-create the directory: a concurrent `epresso build` (which wipes
+            # dist/) can remove it after the mkdir above, and the raw write would
+            # then raise FileNotFoundError out of the request handler.
+            out.parent.mkdir(parents=True, exist_ok=True)
             out.write_text(self.scripts[h], encoding="utf-8")
             self._scripts_written.add(h)

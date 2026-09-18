@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.3.0"
+version = "0.4.0"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -66,6 +66,7 @@ select = ["E", "F", "I", "UP", "B"]
 "src/epresso/docsgen.py" = ["E501"]  # the bundled default docs layout is single-line HTML
 "src/epresso/routing.py" = ["E501"]  # long f-string error messages
 "src/epresso/content/loaders.py" = ["E501"]
+"src/epresso/classes.py" = ["E501"]  # the utility→property regex table is one rule per line
 
 [tool.pyright]
 pythonVersion = "3.12"

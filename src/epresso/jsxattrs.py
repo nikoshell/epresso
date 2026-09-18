@@ -32,11 +32,14 @@ _ATTR_RE = re.compile(
         (?:
           "([^"]*)"                     # double-quoted string
          |'([^']*)'                     # single-quoted string
-         |\{([\s\S]*?)\}                # braced expression
+         |\{( (?: [^{}] | \{[^{}]*\} )* )\}  # braced expression — the inner
+         #                              alternative allows one level of nesting, so
+         #                              `items={[{"title": "A"}]}` parses; deeper
+         #                              nesting than that is not supported.
         )
       |([\w-]+)                         # bare boolean key
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.DOTALL,
 )
 
 

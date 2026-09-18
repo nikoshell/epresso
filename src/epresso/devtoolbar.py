@@ -164,7 +164,7 @@ html{scroll-padding-bottom:64px}
     deactivateLayout();                // ...and the layout view
     if(pop){pop.hidden=true;clearOutline();}
     tb.classList.add('open');
-    try{sessionStorage.setItem('__epresso_app',app);}catch(e){}
+    prefs.app=app;savePrefs();   // remember the open panel across reloads
     btns.forEach(function(b){if(b===inspBtn()||b===layoutBtn())return;b.classList.toggle('on',b.getAttribute('data-app')===app);});
     Array.prototype.forEach.call(panels.querySelectorAll('section'),function(s){s.classList.toggle('active',s.getAttribute('data-panel')===app);});
     if(app==='audit')runAudit();
@@ -172,7 +172,7 @@ html{scroll-padding-bottom:64px}
     positionStatus();
     fitBodyPad();   // reserve space for the (taller) open panel
   }
-  function close(){tb.classList.remove('open');try{sessionStorage.removeItem('__epresso_app');}catch(e){}btns.forEach(function(b){if(b===inspBtn()||b===layoutBtn())return;b.classList.remove('on');});positionStatus();fitBodyPad();}
+  function close(){tb.classList.remove('open');prefs.app='';savePrefs();btns.forEach(function(b){if(b===inspBtn()||b===layoutBtn())return;b.classList.remove('on');});positionStatus();fitBodyPad();}
   function deactivateInspect(){
     mode=false;var ib=inspBtn();if(ib)ib.classList.remove('on');
     document.body.classList.remove('ep-inspect');
@@ -189,12 +189,17 @@ html{scroll-padding-bottom:64px}
     if(tb.classList.contains('open')&&b.classList.contains('on')){close();}
     else{open(app);}
   };});
-  if(dismiss)dismiss.onclick=function(){tb.style.display='none';fitBodyPad();};
-  function toggleToolbar(){
-    if(tb.style.display==='none'){tb.style.display='';}
-    else{tb.style.display='none';close();deactivateInspect();if(pop)pop.hidden=true;clearOutline();}
+  /* Hidden state is persisted in the toolbar prefs, so a dismissed toolbar
+     (the x button, or Shift+Alt+D) stays hidden across reloads and navigations
+     instead of reappearing on every page load. */
+  function setHidden(hidden){
+    prefs.hidden=!!hidden;savePrefs();
+    if(prefs.hidden){close();deactivateInspect();if(pop)pop.hidden=true;clearOutline();tb.style.display='none';}
+    else{tb.style.display='';}
     positionStatus();fitBodyPad();
   }
+  if(dismiss)dismiss.onclick=function(){setHidden(true);};
+  function toggleToolbar(){setHidden(tb.style.display!=='none');}
   /* Keyboard shortcuts — this toolbar only exists in development builds, so
      they are dev-only by construction. Shift+Alt rather than Ctrl+Shift to
      stay clear of browser-reserved combos (Ctrl+Shift+D/I). Matched on e.code
@@ -506,7 +511,10 @@ html{scroll-padding-bottom:64px}
   renderPageComponents();
   runAudit();   // surface the audit badge immediately on page load
   positionStatus();
-  (function(){try{var st=sessionStorage.getItem('__epresso_app');if(st&&st!=='inspect'&&document.querySelector('[data-app="'+st+'"]'))open(st);}catch(e){}})();
+  /* Restore the persisted open/hidden state. A hidden toolbar wins: it stays
+     hidden (and closed) until shown again. */
+  if(prefs.hidden){setHidden(true);}
+  else if(prefs.app&&prefs.app!=='inspect'&&document.querySelector('[data-app="'+prefs.app+'"]')){try{open(prefs.app);}catch(e){}}
 })();
 </script>
 </div>"""

@@ -355,7 +355,10 @@ def _extract_slots(content: str) -> tuple[str, dict[str, str]]:
             continue
         tag = m.group(1)
         attrs = m.group(2) or ""
-        sm = re.search(r'\bslot\s*=\s*["\']([^"\']+)["\']', attrs)
+        # The `(?<![\w-])` guard keeps a prefixed data attribute (`data-slot=`,
+        # `aria-slot=`) from being read as the slot marker: `\b` alone matches
+        # between `-` and `slot`.
+        sm = re.search(r'(?<![\w-])slot\s*=\s*["\']([^"\']+)["\']', attrs)
         if tag.lower() == "fragment":
             if sm is None:
                 i = m.end()  # zero-output group: drop the marker
@@ -484,7 +487,9 @@ def _render_epresso_component(
     # Execute the frontmatter per render with `site` and the raw
     # passed props in scope, so components can compute values (e.g. config
     # lookups) at the top level and reference them straight in the body.
-    namespace: dict[str, Any] = {"site": site, "props": dict(kwargs)}
+    # Globals first so a component can shadow one, and so `cn` / the variant helpers
+    # are usable in the frontmatter without importing from the site's private `_lib`.
+    namespace: dict[str, Any] = {**environment.globals, "site": site, "props": dict(kwargs)}
     if fm_code is not None:
         try:
             exec(fm_code, namespace)

@@ -62,6 +62,22 @@ def test_page_panel_no_content_dependencies():
     assert "no content dependencies" in panel
 
 
+def test_toolbar_persists_open_and_hidden_state():
+    """The open panel and the hidden state live in the toolbar prefs (localStorage),
+    so a reload or a dev-server restart restores them instead of resetting."""
+    site = _site()
+    out = devtoolbar.inject(_page(site, "/basics/components/"), site, "/basics/components/")
+    # the open panel is remembered in prefs, not sessionStorage
+    assert "prefs.app=app;savePrefs();" in out
+    assert "prefs.app='';savePrefs();" in out
+    assert "__epresso_app" not in out
+    # hidden state is persisted and restored on load (hidden wins over open)
+    assert "prefs.hidden=!!hidden;savePrefs();" in out
+    assert "if(prefs.hidden){setHidden(true);}" in out
+    assert "else if(prefs.app&&prefs.app!=='inspect'" in out
+    assert "if(dismiss)dismiss.onclick=function(){setHidden(true);};" in out
+
+
 def test_theme_emulation_button():
     """A toolbar button fakes the OS colour-scheme preference."""
     site = _site()
@@ -88,9 +104,10 @@ def test_keyboard_shortcuts_wired():
     assert "var keys={KeyD:toggleToolbar,KeyI:toggleInspect,KeyL:toggleLayout};" in out
     # never while typing
     assert "isContentEditable" in out
-    # toggleToolbar closes an open panel / exits inspect when hiding
-    assert "function toggleToolbar(){" in out
-    assert "else{tb.style.display='none';close();deactivateInspect();" in out
+    # toggleToolbar flips the persisted hidden state; hiding also closes the
+    # panel / exits inspect
+    assert "function toggleToolbar(){setHidden(tb.style.display!=='none');}" in out
+    assert "if(prefs.hidden){close();deactivateInspect();if(pop)pop.hidden=true;clearOutline();tb.style.display='none';}" in out
     # advertised on the controls and in the settings panel
     assert 'title="Inspect elements (Shift+Alt+I)"' in out
     assert 'title="Hide toolbar (Shift+Alt+D)"' in out
