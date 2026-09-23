@@ -173,11 +173,16 @@ class RenderedBodyCache:
         return entries if isinstance(entries, dict) else {}
 
     def store(self, config_hash: str, code_hash: str, entries: dict[str, dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(
-            json.dumps({"configHash": config_hash, "codeHash": code_hash, "entries": entries}),
-            encoding="utf-8",
-        )
+        # Best effort: the cache is an optimisation, and a project directory can be
+        # read-only (CI checkouts, sandboxes) — that must not fail a build.
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(
+                json.dumps({"configHash": config_hash, "codeHash": code_hash, "entries": entries}),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
 
 
 class BuildGraph:
@@ -285,17 +290,22 @@ class BuildGraph:
         if cc.exists():
             files.append(("content.config.py", cc.read_bytes()))
         # External layers are code too: a changed local layer (or a re-fetched repo)
-        # must invalidate the cache. Prefixed so a name shared with a site root is
-        # still distinguishable.
+        # must invalidate the cache. A layer contributes only `components/` and
+        # `layouts/` (ADR-0003), so hash just those. Walking the whole checkout
+        # pulled in `.git/` and any stray file, reading megabytes per build and
+        # invalidating the cache on every git command. Prefixed so a name shared
+        # with a site root is still distinguishable.
         for i, base in enumerate(layer_dirs or []):
-            if not base.exists():
-                continue
-            for f in sorted(base.rglob("*")):
-                if not f.is_file() or "__pycache__" in f.parts:
+            for sub in ("components", "layouts"):
+                root = base / sub
+                if not root.is_dir():
                     continue
-                if f.suffix.lower() in {".md", ".pyc", ".pyo"}:
-                    continue
-                files.append((f"layer{i}:{f.relative_to(base)}", f.read_bytes()))
+                for f in sorted(root.rglob("*")):
+                    if not f.is_file() or "__pycache__" in f.parts:
+                        continue
+                    if f.suffix.lower() in {".md", ".pyc", ".pyo"}:
+                        continue
+                    files.append((f"layer{i}:{sub}/{f.relative_to(root)}", f.read_bytes()))
         h = hashlib.sha256()
         for rel, data in sorted(files, key=lambda x: x[0]):
             h.update(rel.encode())

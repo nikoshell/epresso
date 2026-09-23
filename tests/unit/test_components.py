@@ -108,3 +108,61 @@ def test_props_literal_rejects_an_unknown_value(tmp_path):
         msg = str(e)
         assert "invalid props for component 'Tone'" in msg
         assert "tone" in msg
+
+
+def test_component_css_template_compiled_once(monkeypatch):
+    """A component's <style> is compiled at parse time, not on every render."""
+    import jinja2
+
+    root, site = _make(
+        {
+            "components/Box.ep": (
+                "---\n---\n"
+                '<div class="box"><slot/></div>\n'
+                "<style>.box { color: red }</style>\n"
+            ),
+            "pages/index.ep": '---\n---\n<div><Box>a</Box><Box>b</Box></div>\n',
+        }
+    )
+    compiled: list[str] = []
+    original = jinja2.Environment.from_string
+
+    def counting(self, source, globals=None, template_class=None):
+        compiled.append(source)
+        return original(self, source, globals, template_class)
+
+    monkeypatch.setattr(jinja2.Environment, "from_string", counting)
+    site.build()
+    # Two Box renders, but its stylesheet source was compiled only once.
+    assert [s for s in compiled if ".box" in s and "color: red" in s] == [
+        ".box { color: red }"
+    ]
+    # ...and both renders still produced scoped markup.
+    html = (site.config.dir_output() / "index.html").read_text()
+    assert html.count("class=\"box\"") == 2
+
+
+def test_render_independent_frontmatter_is_executed_once(tmp_path):
+    """Frontmatter that never reads site/props is executed at parse time.
+
+    Otherwise every render re-runs its module body — e.g. Icon.ep rebuilt its
+    whole icon dict 3,919 times in a real docs build.
+    """
+    from epresso.components import _parse_component
+
+    root, site = _make(
+        {
+            "components/Static.ep": "---\nVALUE = 41 + 1\n---\n<p>{{ VALUE }}</p>\n",
+            "components/Dynamic.ep": '---\nVALUE = props.get("n", 0)\n---\n<p>{{ VALUE }}</p>\n',
+            "pages/index.ep": '---\n---\n<div><Static /><Dynamic n={2} /></div>\n',
+        }
+    )
+    site._do_load()
+    static_ns = _parse_component(root / "components" / "Static.ep", site.env)[9]
+    dynamic_ns = _parse_component(root / "components" / "Dynamic.ep", site.env)[9]
+    assert static_ns is not None and static_ns["VALUE"] == 42
+    assert dynamic_ns is None  # reads props -> must run per render
+
+    site.build()
+    html = (site.config.dir_output() / "index.html").read_text()
+    assert ">42<" in html and ">2<" in html

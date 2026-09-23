@@ -1,3 +1,7 @@
+---
+order: 420
+---
+
 # CLI
 
 epresso ships a single `epresso` command with subcommands:
@@ -57,7 +61,7 @@ in the frontmatter — and offers `textDocument/formatting` backed by
 epresso lsp        # speak LSP on stdin/stdout
 ```
 
-Point any LSP-capable editor at it; see [Editor setup](/editor-setup/).
+Point any LSP-capable editor at it; see [Editor setup](/guides/editor-setup/).
 The bundled VS Code extension and a small Neovim config snippet both use it.
 
 ### `epresso fmt --expand`

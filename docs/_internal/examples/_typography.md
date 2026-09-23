@@ -20,7 +20,7 @@ title). Anchors are added automatically — hover a heading to copy its link.
 ## Inline styles
 
 - **Bold**, *italic*, and `inline code`.
-- A [link to the markdown guide](../guides/content/markdown.md) and an external
+- A [link to the markdown guide](guides/content/markdown.md) and an external
   link to [markdown-it](https://github.com/markdown-it/markdown-it).
 
 ## Code

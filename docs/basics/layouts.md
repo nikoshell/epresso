@@ -1,13 +1,17 @@
+---
+order: 150
+---
+
 # Layouts
 
 Layouts wrap page content in a shared HTML shell. A layout is a **layout
 component**: an `.ep` file that emits the document (or a region) and exposes
 `<slot/>` placeholders.
 
-Layouts live in the top-level `layouts/` directory (or `src/layouts/` in a
-[`src/` project](project-structure.md)). Because `layouts/` is a component root,
-any `.ep` file there can also be used as a component from another template.
-Layouts can also come from a [layer](../guides/extending/layers.md) — another
+Layouts live in the top-level `layouts/` directory. Because `layouts/` is a
+component root, any `.ep` file there can also be used as a component from
+another template.
+Layouts can also come from a [layer](guides/extending/layers.md) — another
 repo, package or directory — with the site's own `layouts/` always searched
 first.
 

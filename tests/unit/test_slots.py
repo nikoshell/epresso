@@ -303,4 +303,40 @@ def test_ep_file_shape_rejects_two_roots_at_build():
     assert "invalid .ep file shape" in str(exc.value)
 
 
+def test_extract_slots_fast_path_never_skips_a_marker():
+    """`_extract_slots` skips the marker regex when the content has no `slot`
+    literal. That regex costs ~6 ms on the 250 KB content string a layout gets
+    (the lookbehind and the alternation are tried at every `<`), and on a 997-doc
+    build none of its 30,744 calls was handed a marker — so the shortcut is where
+    the time went.
+
+    It is only safe if it is a superset of the real pattern, so assert both
+    directions against that pattern: content it does not match comes back
+    byte-identical (including when the cheap test over-triggers), and content it
+    does match is still consumed by the slow path.
+    """
+    import re
+
+    from epresso.components import _extract_slots
+
+    marker = re.compile(r"<\s*/?\s*(?:>|fragment\b)|(?<![\w-])slot\s*=", re.IGNORECASE)
+    cases = [
+        '<Fragment slot="header">H</Fragment>BODY',
+        "<Fragment>bare</Fragment>BODY",
+        "<>grouped</>",
+        "< div slot = 'side' >x</ div >",
+        "<FRAGMENT>upper</FRAGMENT>BODY",
+        # Over-trigger the cheap test: still must come back untouched.
+        '<div data-slot="track"><Inner /></div>',
+        "slotted text and <FragmentS>a</FragmentS>",
+        "plain <p>content</p>",
+    ]
+    for content in cases:
+        out, slots = _extract_slots(content)
+        if marker.search(content) is None:
+            assert (out, slots) == (content, {}), content
+        else:
+            assert out != content or slots, content
+
+
 

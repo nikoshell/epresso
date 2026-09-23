@@ -1,3 +1,7 @@
+---
+order: 343
+---
+
 # Middleware
 
 epresso is a **build-time, static generator** — there is no per-request

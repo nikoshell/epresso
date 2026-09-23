@@ -1,8 +1,9 @@
 ---
-title: Start from a template
-order: 20
+order: 362
 description: Scaffold a full site from a ready-made theme with epresso new.
 ---
+
+# Start from a template
 
 `epresso new` scaffolds a project from a **starter template** or a **theme** — a
 complete, runnable site — into a new directory, and strips its git history. You

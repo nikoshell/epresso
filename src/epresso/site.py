@@ -72,6 +72,9 @@ class Site:
         # html transforms contributed by plugins via ``caps.transform_html``; reset
         # each load so re-loads are idempotent.
         self._html_transforms: list[tuple[str, Any]] = []
+        # source transforms contributed via ``caps.add_source_transform``; reset
+        # each load for the same reason (``on_setup`` re-registers them).
+        self._source_transforms: list[tuple[str, Any]] = []
         self._production = False  # True during production builds (hides drafts/scheduled)
         self._loaded = False
         self._link_resolver = None  # lazily built from routes/content
@@ -79,8 +82,10 @@ class Site:
         # graph, not on Site — see BuildGraph.
         self.graph = BuildGraph(self.store, self.config)
         self.layers: list[Layer] = []  # resolved [layers] roots (populated in _do_load)
+        self._perf: dict[str, float] = {}  # load-phase timings, surfaced by BuildResult.perf
         self._route_metadata: dict[str, Any] = {}
-        self._use_rendered_cache = False  # build path reuses persisted content bodies
+        self._page_templates: dict[str, Any] = {}  # template_str -> compiled page template
+        self._routes: list[Route] | None = None  # cached route expansion; cleared by _do_load
         # Side-band render output (scoped CSS + client scripts) lives in the
         # render session, not on Site — see RenderSession.
         self.session = RenderSession()
@@ -164,21 +169,33 @@ class Site:
 
     # -- loading ------------------------------------------------------------
     @classmethod
-    def load(cls, root: Path | None = None, env: str | None = None) -> Site:
-        """Load a site. ``env`` selects ``site.<env>.toml`` + ``.env.<env>``."""
+    def load(cls, root: Path | None = None, env: str | None = None, *, load: bool = True, dev: bool = False) -> Site:
+        """Load a site. ``env`` selects ``site.<env>.toml`` + ``.env.<env>``.
+
+        ``load=False`` defers the content load to :meth:`build`, for callers that
+        are about to build anyway. Without it every collection is loaded and every
+        Markdown body rendered twice (once here, once in ``build``).
+
+        ``dev=True`` serves unhashed asset URLs. It must be applied here rather
+        than after loading: the rendered-body cache is keyed on the config hash, so
+        flipping ``assets.hash`` afterwards invalidates every cached body.
+        """
         import os
 
         from .config import load_env_file
 
         env = env or os.environ.get("EPRESSO_ENV")
         config = load_config(root, env=env)
+        if dev:
+            config.assets.hash = False
         site = cls(config)
         site.env_name = env
         site.env_vars = load_env_file(config.root, env)
         # expose env vars to os.environ for content loaders / plugins (do not override)
         for k, v in site.env_vars.items():
             os.environ.setdefault(k, v)
-        site._do_load()
+        if load:
+            site._do_load()
         return site
 
     def _do_load(self) -> None:
@@ -190,13 +207,28 @@ class Site:
         self.images = ImagePipeline(self.config)  # fresh transform map per load
         self._link_resolver = None  # rebuild from fresh routes on (re)load
         self._html_transforms = []  # idempotent: plugin transforms re-register each load
+        self._source_transforms = []  # likewise; they are per-environment too
+        self._page_templates = {}  # fresh Jinja environment => compiled page templates are stale
+        self._routes = None  # routes hold the previous load's entries
         self.plugins.run_hook("before_load", self)
-        load_collections(self.store, self.config.root, self.config.source_root())
+        # Phase timings for `epresso build --perf` and bench/run.py; cheap enough
+        # to always collect (two perf_counter pairs per load).
+        self._perf = {}
+        _t = time.monotonic()
+        load_collections(self.store, self.config.root)
+        self._perf["collections"] = time.monotonic() - _t
+        _t = time.monotonic()
         self._render_content_bodies()
+        self._perf["content"] = time.monotonic() - _t
+        # Rendering bodies expands routes on the way (the link resolver), before
+        # every entry has one — that expansion is incomplete, so drop it.
+        self._routes = None
+        _t = time.monotonic()
         self.env = build_environment(self.config, self.config.dir_pages(), layer_dirs)
         bind_globals(self.env, self)
         self.plugins.run_hook("on_setup", self)  # globals/filters/transforms (also used in dev)
         self.plugins.run_hook("after_load", self)
+        self._perf["setup"] = time.monotonic() - _t
         self._loaded = True
 
     def _render_content_bodies(self) -> None:
@@ -204,14 +236,13 @@ class Site:
         component_names = tuple(self.config.markdown.components or [])
         from .markdown import component_placeholder
 
-        cache: RenderedBodyCache | None = None
-        cached: dict[str, dict[str, Any]] = {}
-        config_hash = code_hash = ""
-        if self._use_rendered_cache:
-            # Reuse persisted bodies for unchanged content; render only what changed.
-            config_hash, code_hash = self.graph.ensure_hashes()
-            cache = RenderedBodyCache(self.config.cache_dir())
-            cached = cache.load(config_hash, code_hash)
+        # Reuse persisted bodies for unchanged entries: the cache is keyed by entry
+        # digest and gated by the same config/code hashes as the incremental
+        # manifest. A body is a pure function of its digest, so this is correct for
+        # every caller — the dev reload as much as the build.
+        config_hash, code_hash = self.graph.ensure_hashes()
+        cache = RenderedBodyCache(self.config.cache_dir())
+        cached = cache.load(config_hash, code_hash)
 
         for name in self.store.names():
             for entry in self.store.get_collection(name):
@@ -245,8 +276,7 @@ class Site:
                         "metadata": entry.rendered.metadata,
                     }
 
-        if cache is not None:
-            cache.store(config_hash, code_hash, cached)
+        cache.store(config_hash, code_hash, cached)
 
     # -- link resolution ----------------------------------------------------
     def link_resolver(self) -> Any:
@@ -273,9 +303,16 @@ class Site:
 
     # -- build --------------------------------------------------------------
     def resolve_routes(self) -> list[Route]:
-        """Expand all pages/ patterns into concrete routes (deterministic order)."""
+        """Expand all pages/ patterns into concrete routes (deterministic order).
+
+        Cached for the life of a load: the dev server asks several times per
+        request, and each expansion walks every page and runs
+        ``get_static_paths()``. ``_do_load`` clears it.
+        """
         if self.graph.expanding:
             raise RouteError("resolve_routes() called during route resolution (recursive endpoint?)")
+        if self._routes is not None:
+            return self._routes
         patterns = discover_route_patterns(self.config.dir_pages())
         routes: list[Route] = []
         if self.config.build.redirects:
@@ -295,7 +332,25 @@ class Site:
                 seen.add(r.path)
                 dedup.append(r)
         dedup.sort(key=lambda r: r.path)
+        self._routes = dedup
         return dedup
+
+    def _page_template(self, source: str, path: str = "") -> Any:
+        """Compile a page's ``template_str`` once per load.
+
+        Every route fanned out by one ``get_static_paths()`` shares the same
+        template string, so without this the same page was compiled once per
+        route. Keyed on the source, so an edited template is a new entry.
+
+        ``path`` is passed through to plugin source transforms for context only;
+        the cache key stays the original source so fan-out still hits it.
+        """
+        tmpl = self._page_templates.get(source)
+        if tmpl is None:
+            body = self._apply_source_transforms(source, kind="page", path=path)
+            tmpl = self.env.from_string(body)
+            self._page_templates[source] = tmpl
+        return tmpl
 
     def render_route(self, route: Route) -> tuple[str, str] | None:
         """Render one route → (content, content_type). None if nothing to write."""
@@ -325,7 +380,8 @@ class Site:
                 if route.frontmatter:
                     ctx.update(route.frontmatter)
                 if route.template_str:
-                    html = self.env.from_string(route.template_str).render(**ctx)
+                    page_path = str(route.source) if route.source else ""
+                    html = self._page_template(route.template_str, page_path).render(**ctx)
                 else:
                     html = ""
                 if route.scoped_css:
@@ -364,6 +420,26 @@ class Site:
         )
         html = self._apply_html_transforms(route, html)
         return html, "text/html"
+
+    def _apply_source_transforms(self, source: str, *, kind: str, path: str) -> str:
+        """Run plugin-contributed source transforms over a template body.
+
+        Applied at the point a ``.ep`` body becomes a Jinja template and *before*
+        epresso's own body rewriting (slot expansion in ``components``, JSX tag
+        rewriting by ``jsx``), so a transform sees the body as the author wrote
+        it rather than a half-desugared one.
+
+        ``kind`` is ``"page"`` or ``"component"`` — layouts are components (tell
+        them apart by ``path``); ``path`` is the file being compiled. Transforms
+        may change what a page renders, so a registered transform disables
+        per-route output reuse (see ``build``).
+        """
+        if not self._source_transforms:
+            return source
+        ctx: dict[str, Any] = {"kind": kind, "path": path}
+        for _name, fn in self._source_transforms:
+            source = fn(source, ctx)
+        return source
 
     def _apply_html_transforms(self, route: Route, html: str) -> str:
         """Run plugin-contributed html transforms over a rendered page.
@@ -421,13 +497,15 @@ class Site:
     def build(self, *, clean: bool = True, progress: Any | None = None) -> BuildResult:
         """Build the site. ``progress(i, total, path)`` is called per route during
         the render phase (used by the CLI to show a progress indicator)."""
-        self._use_rendered_cache = True  # reuse persisted content bodies across builds
+        # `start` covers the load too, so result.duration is the whole build and the
+        # per-phase entries in result.perf (collections/content/setup + render/…)
+        # sum to roughly the total.
+        start = time.monotonic()
         self._do_load()  # reflect current on-disk content/templates (runs before_load/on_setup)
         self.plugins.run_hook("before_build", self)
         # Drafts/scheduled are hidden for production builds (default), but shown
         # in non-production envs (development, preview, etc.).
         self._production = self.env_name in (None, "production")
-        start = time.monotonic()
         out_dir = self.config.dir_output()
         self.graph.prepare(clean=clean)
         if clean and out_dir.exists():
@@ -439,6 +517,9 @@ class Site:
             collections=len(self.store.names()),
             entries=sum(len(self.store.get_collection(n)) for n in self.store.names()),
         )
+        # Load-phase timings (collections/content/setup, collected in `_do_load`),
+        # reported alongside the render/asset/output phases below.
+        result.perf.update(self._perf)
         valid: set[str] = set()
         rendered_pages: dict[str, str] = {}
         _t = time.monotonic()
@@ -456,7 +537,13 @@ class Site:
             # 1) Reuse a cached output when data + content deps are unchanged.
             #    A registered html transform may depend on plugin code, so once any
             #    exists we re-render every route (content-body caching still works).
-            if not self._html_transforms and self.graph.can_skip(route.path, cache_key, out_rel):
+            #    A source transform rewrites the template itself, so it gets the
+            #    same treatment.
+            if (
+                not self._html_transforms
+                and not self._source_transforms
+                and self.graph.can_skip(route.path, cache_key, out_rel)
+            ):
                 dst = out_dir / out_rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(self.graph.reuse_output(route.path, out_rel))

@@ -1,8 +1,9 @@
 ---
-title: Create a theme
-order: 30
+order: 363
 description: Structure a project so epresso new can scaffold others from it.
 ---
+
+# Create a theme
 
 A theme is not a special file format. It is a **normal epresso project shaped
 for reuse**: the same `components/`, `layouts/`, `styles/`, `pages/` and
@@ -182,6 +183,6 @@ Your theme's `README.md` is its contract. List:
 ## Next steps
 
 - [Start from a template](guides/themes/from-template.md) — what a consumer runs.
-- [Components](../basics/components.md) — props, slots, scoped CSS.
-- [Plugins](../guides/extending/plugins.md) — if the theme needs template globals
+- [Components](basics/components.md) — props, slots, scoped CSS.
+- [Plugins](guides/extending/plugins.md) — if the theme needs template globals
   or filters (ship a `plugins.py`, as `epresso-ui` does).

@@ -1,3 +1,7 @@
+---
+order: 332
+---
+
 # Configuration
 
 epresso is configured with a TOML file, `site.toml`, validated by Pydantic at load time. Missing file → sensible defaults. Every build/dev/check run loads `site.toml` from the project root.
@@ -38,6 +42,7 @@ compress_html = false  # minify HTML (skips <pre>/<script>/<style>)
 redirects = true       # emit redirect pages from the `redirects` config
 
 [markdown]
+backend = "native"      # renderer: "native" (Python); "rust" = optional accelerator
 highlight = true       # Pygments syntax highlighting for fenced code
 add_slug_ids = true
 autolink_headings = true
@@ -128,16 +133,13 @@ accessors on the loaded config: `dir_content()`, `dir_pages()`,
 `dir_assets()`, `dir_static()`,
 `dir_output()`, and `cache_dir()` (the incremental cache, gitignored).
 
-All of these are resolved against `source_root()` — `<root>/src` when that
-directory exists, `<root>` otherwise (Astro/Nuxt-style, no config needed).
-`dir_static()` (`public/`), `dir_output()` (`dist/`) and `cache_dir()`
-(`.cache/`) always stay at the project root, as do `site.toml` and
+All of these are resolved against the project root, as are `site.toml` and
 `content.config.py`. Content collection `base` paths are resolved against the
-same source root. See
-[Project structure](../../basics/project-structure.md).
+same root. See
+[Project structure](../basics/project-structure.md).
 
 External component/layout roots come from `[layers] use` — see
-[Layers](../guides/extending/layers.md).
+[Layers](guides/extending/layers.md).
 
 ## Programmatic loading
 

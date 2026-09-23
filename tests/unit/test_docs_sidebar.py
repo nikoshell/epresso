@@ -42,3 +42,35 @@ def test_nav_mask_overflow_is_published_by_the_script():
     assert 'window.addEventListener("resize", publishFades)' in _SRC
     assert 'document.addEventListener("toggle", publishFades, true)' in _SRC
 
+
+def test_nav_collapse_threshold_is_the_theme_option():
+    """`[theme] nav_collapse_after` (default 40) decides when the top level folds.
+    The body reads it and passes it in, so this component's frontmatter stays
+    render-independent (it is executed once per environment, not per page)."""
+    from epresso.site import Site
+
+    site = Site.load(_THEME)
+    site.config.theme["nav_collapse_after"] = 10_000  # never fold
+    expanded, _ = site.render_at("/basics/components/")
+    assert 'class="tree-head"' in expanded
+    site.config.theme["nav_collapse_after"] = 1  # fold immediately
+    folded, _ = site.render_at("/basics/components/")
+    assert 'class="tree-head"' not in folded
+    assert "<summary" in folded
+
+
+def test_sidebar_is_rendered_once_and_marked_client_side():
+    """The tree is identical on every page, so it is rendered once per build
+    (`_NAV_CACHE`) and must carry no per-page state; the current page is marked
+    by the component's script. Re-adding a server-side marker would silently
+    invalidate the cache for every page, so assert the split."""
+    assert "def render_sidebar(docs, collapse_after=None)" in _SRC  # no per-page `current`
+    assert "_NAV_CACHE[key] = hit" in _SRC
+    frontmatter_and_markup = _SRC.split("<script>")[0]
+    assert "aria-current" not in frontmatter_and_markup
+    assert '<details open>' not in frontmatter_and_markup
+    # the script relies on these hooks to find and mark the current page
+    assert "markCurrent" in _SRC
+    assert 'link.setAttribute("aria-current", "page")' in _SRC
+    assert 'el.classList.contains("tree-dir")' in _SRC
+

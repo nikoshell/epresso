@@ -7,11 +7,13 @@ Uses markdown-it-py; produces ``RenderedContent`` with ``html`` and metadata
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from typing import Any
 
 from markdown_it import MarkdownIt
 
 from .content import store as _store
+from .errors import ContentError
 from .jsxattrs import parse_jsx_attrs
 
 # Plugin-registered markdown extensions. Pandoc / MkDocs features are opt-in via
@@ -295,8 +297,11 @@ def pygments_css_pair(light: str = "default", dark: str = "default", selector: s
 
 
 
-def _extract_headings_and_images(md: MarkdownIt, body: str) -> tuple[list[dict[str, Any]], list[str]]:
-    tokens = md.parse(body)
+def _headings_and_images_from_tokens(tokens: list) -> tuple[list[dict[str, Any]], list[str]]:
+    """Collect heading + image metadata from an already-parsed token stream.
+
+    Runs over the same tokens the renderer renders, so the body is parsed once.
+    """
     headings: list[dict[str, Any]] = []
     images: list[str] = []
     for i, tok in enumerate(tokens):
@@ -510,7 +515,52 @@ def _rewrite_relative_images(html: str, base: str) -> str:
     return re.sub(r'src="([^"]+)"', _repl, html)
 
 
+# ── backend dispatch ───────────────────────────────────────────────────────
+#
+# `[markdown] backend` selects the renderer. "native" is the pure-Python
+# markdown-it-py pipeline below. "rust" is an optional accelerator that is not
+# part of this distribution yet, so selecting it fails loudly instead of quietly
+# rendering with a different engine (which would make builds non-reproducible).
+# Registering a real backend later is one line here.
+_BACKENDS: dict[str, Callable[..., _store.RenderedContent]] = {}
+
+
+def _backend(name: str) -> Callable[..., _store.RenderedContent]:
+    fn = _BACKENDS.get(name)
+    if fn is None:
+        raise ContentError(
+            f"markdown backend {name!r} is not available in this installation",
+            fix='install the markdown accelerator, or set [markdown] backend = "native"',
+        )
+    return fn
+
+
 def render_markdown(
+    body: str,
+    config_markdown: Any,
+    image_base: str | None = None,
+    component_names: tuple[str, ...] = (),
+    component_renderer=None,
+    link_resolver=None,
+) -> _store.RenderedContent:
+    """Render a Markdown body through the configured backend.
+
+    ``config_markdown.backend`` selects the renderer — ``"native"`` (the built-in
+    markdown-it-py pipeline) or ``"rust"`` (the optional accelerator, which must
+    be installed). Everything else is forwarded to the backend unchanged.
+    """
+    name = getattr(config_markdown, "backend", "native") or "native"
+    return _backend(name)(
+        body,
+        config_markdown,
+        image_base=image_base,
+        component_names=component_names,
+        component_renderer=component_renderer,
+        link_resolver=link_resolver,
+    )
+
+
+def _render_native(
     body: str,
     config_markdown: Any,
     image_base: str | None = None,
@@ -545,14 +595,18 @@ def render_markdown(
     body = _re.sub(r"<(\w+)\s*/\s*>", r"<\1/>", body)
     body = _apply_source_transforms(body)
     body = _apply_render_transforms(md, body, 0)
-    html = md.render(body)
+    # Parse once: render from the token stream and read heading/image metadata
+    # from those same tokens, rather than parsing the body a second time.
+    env: dict[str, Any] = {}
+    tokens = md.parse(body, env)
+    html = md.renderer.render(tokens, md.options, env)
     for _fn in _MD_HTML_POST:
         html = _fn(html)
     if image_base:
         html = _rewrite_relative_images(html, image_base.rstrip("/") + "/")
     if link_resolver is not None:
         html = _rewrite_markdown_links(html, link_resolver)
-    headings, images = _extract_headings_and_images(md, body)
+    headings, images = _headings_and_images_from_tokens(tokens)
     if headings and getattr(config_markdown, "add_slug_ids", True):
         html = _inject_heading_ids(
             html, headings, autolink=getattr(config_markdown, "autolink_headings", True)
@@ -561,6 +615,9 @@ def render_markdown(
         html=html,
         metadata={"headings": headings, "image_paths": images},
     )
+
+
+_BACKENDS["native"] = _render_native
 
 
 _WIKI_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
@@ -610,7 +667,7 @@ def _rewrite_markdown_links(html: str, resolver) -> str:
 def _inject_heading_ids(html: str, headings: list[dict], autolink: bool = False) -> str:
     """Add ``id="<slug>"`` (and, when ``autolink``, a ``#`` anchor link) to each heading.
 
-    The ``headings`` list is produced by :func:`_extract_headings_and_images` in
+    The ``headings`` list is produced by :func:`_headings_and_images_from_tokens` in
     document order; slugs are generated with :func:`slugify`. This powers
     in-page tables of contents (``[\u2191](\u2191)`` anchors). Headings that
     already carry an ``id`` are left untouched. ``autolink`` wraps each heading in

@@ -1,12 +1,15 @@
+---
+order: 140
+---
+
 # Components
 
 Components are server-rendered, tag-based building blocks. epresso resolves a
 component as `components/<Name>.ep` first, then looks under `layouts/` (so a
-layout can double as a component). In a [`src/` project](project-structure.md)
-both directories live under `src/`.
+layout can double as a component).
 
 Components from an external repo or directory can be layered in with
-[`[layers] use`](../guides/extending/layers.md); the site's own files are always
+[`[layers] use`](guides/extending/layers.md); the site's own files are always
 searched first, so a site component with a matching basename overrides the
 layer's.
 
@@ -242,7 +245,7 @@ Identical script blocks dedupe to one bundle under `dist/_epresso/scripts/`.
 ## Markdown components
 
 Allow-listed component tags can be used directly in Markdown (see
-[Markdown](../guides/content/markdown.md). `md/` wrapper components take precedence so a
+[Markdown](guides/content/markdown.md). `md/` wrapper components take precedence so a
 markdown-facing interface can differ from the underlying component (e.g. a
 `<YouTube id>` → blocks/YouTube wrapper).
 

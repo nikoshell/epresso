@@ -89,10 +89,6 @@ assets/              # buildable assets (images, js); top-level files land at ro
 public/              # files copied verbatim to the output root
 ```
 
-> Optional `src/`: when a top-level `src/` directory exists, the source dirs
-> above are resolved inside it (Astro/Nuxt-style). `public/`, `dist/`,
-> `site.toml` and `content.config.py` stay at the root.
-
 ## Configuration (`site.toml`)
 
 ### Environments
@@ -476,7 +472,7 @@ uv run pytest --cov=epresso
 the `epresso` console script so profilers can wrap it directly:
 
 ```bash
-uv run --project . epresso build themes/docs --perf       # phase timings (render/assets/outputs)
+uv run --project . epresso build themes/docs --perf       # phase timings (load/content/render/assets/outputs)
 uv run --project . epresso build themes/docs --profile    # cProfile → epresso-profile.pstats
 uv run python -m pstats epresso-profile.pstats            # inspect the stats file
 
@@ -513,6 +509,26 @@ produced no pages. The baseline is pinned to the interpreter it was recorded on;
 recording it under a different Python makes the gate report-only until you
 re-record. A change of CI hardware may need one `--update` run.
 
+### Phase and scale benchmarks
+
+`bench/` is the measurement suite (find and compare costs; not a gate). `phases`
+isolates each render stage — file loading, frontmatter, Markdown parse vs render,
+Pygments, component expansion, Jinja, HTML postprocessing, filesystem output — and
+reports cold vs warm per fixture. `scale` builds a synthetic site at 1, 10, 100,
+1,000 and 10,000 pages and splits the real `Site.load` + `Site.build` path.
+
+```bash
+uv run python bench/run.py phases                     # phase table, per fixture
+uv run python bench/run.py scale --sizes 1,10,100     # page-count sweep
+uv run python bench/run.py all --json bench/results.json
+```
+
+CI runs a 200-page scale benchmark on every push to `main` and every PR, and puts
+a phase table plus a Mermaid graph of the phase split on the workflow run page
+(`--summary`). The chart is a pie because GitHub's pinned Mermaid version does not
+render `xychart-beta`. See [`bench/README.md`](bench/README.md). For a real
+theme, prefer `epresso build <theme> --perf` / `--profile` above.
+
 ### Run the bundled themes
 
 The repo ships runnable theme projects under `themes/` (`basic`, `blog`,
@@ -548,7 +564,7 @@ For **VS Code**, `extras/vscode/` bundles syntax highlighting, live diagnostics
 open `extras/vscode/` and press `F5`, or package it with
 `npx @vscode/vsce package`. `epresso lsp` is a dependency-free Language Server
 that any LSP-capable editor can drive (see
-[docs/editor-setup](docs/editor-setup/index.md)). The TextMate grammar is standard
+[docs/editor-setup](docs/guides/editor-setup.md)). The TextMate grammar is standard
 JSON, so other `.tmLanguage.json` editors can reuse it. See
 [`extras/vscode/README.md`](https://github.com/nikoshell/epresso/blob/main/extras/vscode/README.md).
 

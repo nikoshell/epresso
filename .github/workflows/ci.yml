@@ -81,3 +81,41 @@ jobs:
           name: perf
           path: perf/
           if-no-files-found: ignore
+
+  bench:
+    name: render benchmarks (200 pages)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --python 3.13
+
+      - name: Measure (200-page build + phase split)
+        run: |
+          uv run --python 3.13 python bench/run.py scale --sizes 200 --shape docs \
+            --json bench/results.json --summary bench/summary.md | tee bench/bench.log
+
+      # The summary carries a table plus a Mermaid pie of the phase split, which
+      # GitHub renders on the run page. (Mermaid line/bar charts — xychart-beta —
+      # are not supported by GitHub's pinned Mermaid version, hence the pie.)
+      - name: Job summary (table + phase graph)
+        if: always()
+        run: |
+          if [ -f bench/summary.md ]; then cat bench/summary.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload bench artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: |
+            bench/results.json
+            bench/summary.md
+            bench/bench.log
+          if-no-files-found: ignore

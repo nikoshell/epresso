@@ -1,3 +1,7 @@
+---
+order: 240
+---
+
 # Client-side behavior
 
 epresso is **no-JavaScript-by-default**. When you need client-side behavior, put it in a

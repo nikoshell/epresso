@@ -1,3 +1,7 @@
+---
+order: 315
+---
+
 # Endpoints
 
 An endpoint is a page that returns a non-HTML response (JSON, XML, plain text,

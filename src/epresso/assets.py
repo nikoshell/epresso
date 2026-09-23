@@ -110,6 +110,8 @@ class AssetPipeline:
 
     def _process_css(self, entries: list[str], out_dir: Path) -> None:
         """Run the CSS processor (PostCSS/Tailwind) on entry points, else copy verbatim."""
+        from .minify import minify_css
+
         processor = CSSProcessor(self.config)
         for entry in entries:
             src = self.config.dir_assets() / entry
@@ -119,6 +121,11 @@ class AssetPipeline:
                 continue
             out = processor.process(src, out_dir)
             if out is not None:
+                # The postcss path runs the project's plugins, which do not minify;
+                # tailwind's CLI is already invoked with --minify. (A stylesheet
+                # epresso copies verbatim below is left as the author wrote it.)
+                if not processor.minifies:
+                    out.write_text(minify_css(out.read_text(encoding="utf-8")), encoding="utf-8")
                 continue
             # fallback: verbatim copy (CSS stays optional / unprocessed)
             dst = out_dir / "assets" / entry

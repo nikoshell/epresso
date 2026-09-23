@@ -64,7 +64,7 @@ def get_static_paths():
                     "source": c.get("source", ""),
                     "prev": {"url": f"/{prev.id}/", "title": prev.data.title} if prev else None,
                     "next": {"url": f"/{nxt.id}/", "title": nxt.data.title} if nxt else None,
-                    "headings": c.get("headings", []),
+                    "headings": d.headings,
                 },
                 data=d,
                 cache_key=d.digest,

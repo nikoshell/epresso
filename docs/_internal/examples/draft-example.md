@@ -7,7 +7,7 @@ draft: true
 # Draft example
 
 This page is a **draft**. In a production build it is excluded (see
-[draft visibility](../guides/build/environment-variables.md)); in `development`
+[draft visibility](guides/build/environment-variables.md)); in `development`
 and `preview`
 environments it stays visible so you can review it before publishing.
 

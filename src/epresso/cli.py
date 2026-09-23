@@ -316,7 +316,7 @@ def _build_docs_sections(site: Site) -> None:
         os.environ["EPRESSO_BASE"] = eff_base
         try:
             if (src / "site.toml").is_file():
-                child = Site.load(src, env=site.config.env)
+                child = Site.load(src, env=site.config.env, load=False)
             else:
                 theme = (
                     Path(sec.theme)
@@ -324,7 +324,7 @@ def _build_docs_sections(site: Site) -> None:
                     else Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
                 )
                 tmp = Path(auto_docs_project(src, DEFAULT_PORT, theme))
-                child = Site.load(tmp, env=site.config.env)
+                child = Site.load(tmp, env=site.config.env, load=False)
             child.build()
             target = out_dir / out
             if target.exists():
@@ -359,7 +359,7 @@ def build(
     prof: Any = None
 
     def _load_and_build() -> Any:
-        site = Site.load(root, env=_resolve_env(env, "production"))
+        site = Site.load(root, env=_resolve_env(env, "production"), load=False)
         return site, site.build(clean=clean, progress=_make_progress())
 
     try:
@@ -401,7 +401,7 @@ def dev(
 ) -> None:
     """Run the development server with live reload."""
     try:
-        site = Site.load(root, env=_resolve_env(env, "development"))
+        site = Site.load(root, env=_resolve_env(env, "development"), dev=True)
     except EpressoError as e:
         log.error(str(e))
         raise typer.Exit(1) from e
@@ -425,7 +425,7 @@ def preview(
     """Build then serve the static dist/ output (production preview)."""
     from .server import find_free_port, serve_dist
 
-    site = Site.load(root, env=_resolve_env(env, "production"))
+    site = Site.load(root, env=_resolve_env(env, "production"), load=False)
     site.build(progress=_make_progress())
     _end_progress()
     resolved = find_free_port(host, port)
@@ -468,7 +468,7 @@ def docs(
     from .server import find_free_port, serve_dist
 
     try:
-        site = Site.load(root, env=_resolve_env(env, "production"))
+        site = Site.load(root, env=_resolve_env(env, "production"), load=False)
         result = site.build(progress=_make_progress())
         _end_progress()
     except EpressoError as e:
@@ -714,7 +714,7 @@ def deploy(
 ) -> None:
     """Build and deploy the site (GitHub Pages by default)."""
     try:
-        site = Site.load(root)
+        site = Site.load(root, load=False)
     except EpressoError as e:
         typer.secho(str(e), fg=typer.colors.RED, err=True)
         raise typer.Exit(1) from e

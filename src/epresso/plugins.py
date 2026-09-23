@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -65,6 +66,26 @@ LIFECYCLE_HOOKS: tuple[str, ...] = (
 
 HookFn = Callable[..., Any]
 
+
+
+# A host tool (an editor, a preview harness, a screenshotter) needs to instrument
+# a project it must not write to. Telling it to edit ``site.toml`` or drop a
+# ``plugins.py`` into somebody else's repository is not an answer for a tool that
+# is only looking — so the host gets its own channel, and it is purely additive:
+# the project's own plugins still load, and the site is unchanged either way.
+_ENV_SPECS = "EPRESSO_PLUGINS"
+
+
+def _env_specs() -> list[str]:
+    """Plugin specs from ``EPRESSO_PLUGINS``, comma or whitespace separated.
+
+    Accepts ``pkg.mod:Name`` and ``pkg.mod`` exactly like ``[plugins]``, so a host
+    passes the same strings it would have written into the config. The module has
+    to be importable — a host points ``PYTHONPATH`` at it, which is how a plugin
+    living outside the project gets here at all.
+    """
+    raw = os.environ.get(_ENV_SPECS, "")
+    return [spec for spec in raw.replace(",", " ").split() if spec]
 
 
 class Plugin:
@@ -152,9 +173,10 @@ class Capabilities:
     Note
     ----
     ``add_global`` / ``add_filter`` require the Jinja environment, which exists
-    from ``on_setup`` onward. ``register_collection`` / ``add_markdown_extension``
-    must happen in ``before_load`` so the collection body / markdown rendering
-    can see them.
+    from ``on_setup`` onward; ``add_source_transform`` joins them there because it
+    alters what that environment compiles. ``register_collection`` /
+    ``add_markdown_extension`` must happen in ``before_load`` so the collection
+    body / markdown rendering can see them.
     """
 
     _LOAD_PHASE = "before_load"
@@ -182,6 +204,32 @@ class Capabilities:
         """Register a Jinja template filter named ``name``."""
         self._require_env()
         self.site.env.filters[name] = fn
+
+    # -- template source ---------------------------------------------------
+    def add_source_transform(self, fn: Callable[[str, dict[str, Any]], str]) -> None:
+        """Rewrite a template's *source* before Jinja compiles it.
+
+        Signature is ``fn(source, ctx) -> source``, mirroring
+        :meth:`transform_html`. ``ctx`` carries ``{"kind", "path"}``, where
+        ``kind`` is ``"page"`` or ``"component"`` and ``path`` is the file being
+        compiled — read them instead of guessing which file you are instrumenting.
+
+        Runs before epresso's own body rewriting (``.ep`` slot expansion, JSX
+        component-tag rewriting), so the source is what the author wrote. That is
+        what makes this usable for source-anchored tooling: a transform can place
+        its own markers around the real markup and have them survive to the
+        rendered output.
+
+        Two consequences worth knowing:
+
+        * Transforms must be **pure and idempotent per compile** — the result is
+          cached for the life of the loaded environment, and the same page body
+          may be compiled once and rendered for many routes (``get_static_paths``).
+        * A registered transform disables per-route output reuse for the whole
+          build, so a transform that is expensive is felt on every route.
+        """
+        self._require_source_target()
+        self.site._source_transforms.append((self.plugin.name, fn))
 
     # -- content ------------------------------------------------------------
     def register_collection(
@@ -220,7 +268,7 @@ class Capabilities:
         )
         installed = col.install(self.site.store)
         if isinstance(installed.loader, GlobLoader):
-            base = self.site.config.source_root()
+            base = self.site.config.root
             installed.loader.base = (base / installed.loader.base).resolve()
         installed.loader.load(self.site.store, installed)
 
@@ -287,6 +335,10 @@ class Capabilities:
         if not hasattr(self.site, "_html_transforms"):
             raise CapabilityError("this epresso version has no html-transform target", plugin=self.plugin.name)
 
+    def _require_source_target(self) -> None:
+        if not hasattr(self.site, "_source_transforms"):
+            raise CapabilityError("this epresso version has no source-transform target", plugin=self.plugin.name)
+
 
 class CapabilityError(PluginError):
     """A plugin used a capability at the wrong time or against an unknown target."""
@@ -343,8 +395,8 @@ class PluginManager:
 
     # -- discovery -----------------------------------------------------------
     def discover(self, root: Path, config: Any) -> None:
-        """Load plugins from ``[plugins]`` config (dotted paths) and ``plugins.py``."""
-        for spec in config.plugins:
+        """Load plugins from ``[plugins]`` config, ``plugins.py``, and the host."""
+        for spec in [*config.plugins, *_env_specs()]:
             for plugin in self._from_spec(spec):
                 self.register(plugin)
         self._from_project_file(root)

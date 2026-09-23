@@ -53,9 +53,21 @@ def test_computed_has_derived_fields(tmp_path: Path):
     c = _load(tmp_path)["basics/components"].computed
     assert c["group_path"] == ["basics"]
     assert c["order"] == 1  # 0 is the root overview
-    assert any(h["text"] == "API" for h in c["headings"])
     # hub id drops the index filename: develop-and-build/index.md -> "develop-and-build".
     assert _load(tmp_path)["develop-and-build"].computed["is_hub"]
+
+
+def test_loader_does_not_parse_bodies_for_headings(tmp_path: Path):
+    """On-page headings come from the render, not a second Markdown parse.
+
+    The loader used to call ``headings(_MD, body)`` per doc, re-parsing every
+    body that ``render_markdown`` parses again later; ``Entry.headings`` reads
+    the rendered metadata instead.
+    """
+    _write(tmp_path)
+    entry = _load(tmp_path)["basics/components"]
+    assert "headings" not in (entry.computed or {})
+    assert entry.headings == []  # nothing rendered yet
 
 
 def test_lone_index_flattens(tmp_path: Path):
@@ -108,6 +120,17 @@ def test_prev_next_loop_and_order(tmp_path: Path):
     assert real[-1].computed["next"]["url"] == f"/{real[0].id}/"
     # order is a strict sequence.
     assert [e.computed["order"] for e in real] == sorted(e.computed["order"] for e in real)
+
+
+def test_directory_without_a_hub_is_ordered_by_its_smallest_child(tmp_path: Path):
+    """A section is placed by its hub's order; with no hub file it used to fall back
+    to DEFAULT_ORDER, so hub-less sections tied and sorted alphabetically by
+    directory name. It is now placed by the smallest order beneath it — which is
+    what lets a section be ordered, and exist, without a landing page."""
+    _put(tmp_path, "a-later/page.md", "---\norder: 20\n---\n# Later\n\nbody\n")
+    _put(tmp_path, "b-earlier/page.md", "---\norder: 10\n---\n# Earlier\n\nbody\n")
+    loaded = _load(tmp_path)
+    assert loaded["b-earlier/page"].computed["order"] < loaded["a-later/page"].computed["order"]
 
 
 def _put(root: Path, rel: str, text: str) -> None:

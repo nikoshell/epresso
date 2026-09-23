@@ -52,6 +52,8 @@ htmlcov/
 # Profiling artifacts
 epresso-profile.pstats
 perf/
+bench/results.json
+bench/summary.md
 
 # Architecture review reports (local only)
 .arch-review/

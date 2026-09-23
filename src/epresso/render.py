@@ -148,7 +148,7 @@ class RenderSession:
             src.write_text(combined, encoding="utf-8")
             out = out_dir / "_epresso" / f"epresso.{h}.js"
             out.parent.mkdir(parents=True, exist_ok=True)
-            result, detail = bundle_js([str(src)], outfile=out)
+            result, detail = bundle_js([str(src)], outfile=out, minify=True)
             if result != "ok":
                 if result == "failed":
                     warn(f"combined script esbuild failed: {detail}; writing raw")
@@ -230,7 +230,7 @@ class RenderSession:
             src.parent.mkdir(parents=True, exist_ok=True)
             src.write_text(self.scripts[h], encoding="utf-8")
             out.parent.mkdir(parents=True, exist_ok=True)
-            result, detail = bundle_js([str(src)], outfile=out)
+            result, detail = bundle_js([str(src)], outfile=out, minify=True)
             if result == "ok":
                 self._scripts_written.add(h)
                 continue

@@ -134,7 +134,7 @@ def _set_theme_key(tmp: Path, key: str, value: str) -> None:
 
 
 def _apply_branding(tmp: Path, source: Path) -> None:
-    """Apply optional branding from the docs source root, if present.
+    """Apply optional branding from the docs source directory, if present.
 
     ``favicon.ico`` replaces the theme default; ``styles.css`` is appended to the
     theme's global.css (so its CSS-variable/color overrides win); ``logo.svg``
@@ -198,7 +198,7 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     copy_docs_assets(source, tmp / "public" / "content" / docs_dir, docs_dir)
     # Point the theme's docs collection at the copy via site.toml (no env).
     patch_site_toml(tmp, port, source, docs_base=docs_dir_path.resolve())
-    # Optional branding (logo.svg / favicon.ico / styles.css) from the source root.
+    # Optional branding (logo.svg / favicon.ico / styles.css) from the source directory.
     _apply_branding(tmp, source)
     return tmp
 

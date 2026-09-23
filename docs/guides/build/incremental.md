@@ -1,3 +1,7 @@
+---
+order: 334
+---
+
 # Incremental builds & caching
 
 epresso builds are **deterministic** (same source + config → same output) and
@@ -11,7 +15,7 @@ epresso builds are **deterministic** (same source + config → same output) and
 - On the next build, routes whose dependencies haven't changed are **reused**
   from the cache instead of re-rendered.
 - The cache is dropped wholesale when the *config* or any *template/component*
-  changes — including a file in a [layer](../guides/extending/layers.md) — so
+  changes — including a file in a [layer](guides/extending/layers.md) — so
   editing a component re-renders every route.
 
 ## Cache

@@ -5,9 +5,10 @@ doc per file, grouped and ordered by their directory hierarchy.
 
 Each entry stores only its *authored*
 frontmatter in ``data`` (validated against a narrow schema), while derived
-values — hubs (``README.md``/``index.md``), grouping/order, on-page headings and
-circular prev/next — live in ``entry.computed`` (see ``Entry``). Use
-``DocsLoader`` as a collection's ``loader``.
+values — hubs (``README.md``/``index.md``), grouping/order and circular
+prev/next — live in ``entry.computed`` (see ``Entry``). Use ``DocsLoader`` as a
+collection's ``loader``. On-page headings come from the render
+(``Entry.headings``), so the loader does not parse every body a second time.
 """
 
 from __future__ import annotations
@@ -15,14 +16,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from markdown_it import MarkdownIt
-
 from ..document import parse_document
-from ..markdown import first_heading, headings, strip_first_h1
+from ..markdown import first_heading, strip_first_h1
 from .loaders import LoaderObject
 from .store import Collection, ContentStore, Entry, content_digest
-
-_MD = MarkdownIt("commonmark", {"html": True}).enable("table")
 
 
 def _glob(base: Path, pattern: str) -> list[Path]:
@@ -129,9 +126,11 @@ def _order(docs: dict[str, dict]) -> list[dict]:
     """Order docs by directory hierarchy, respecting curated frontmatter order.
 
     Within a directory, pages and subdirectories are interleaved by their
-    authored ``order`` (default 1000): a directory is placed by its hub's order,
-    a page by its own, hub pages lead ties. Assigns the global ``order`` and
-    ``group`` used by the sidebar nav and prev/next chain.
+    authored ``order`` (default 1000): a directory is placed by its hub's order, or
+    — when it has no hub file — by the smallest order anywhere beneath it, so a
+    section can be ordered (and exist) without a landing page. A page is placed by
+    its own order, hub pages lead ties. Assigns the global ``order`` and ``group``
+    used by the sidebar nav and prev/next chain.
     """
     root: dict = {}
     for doc_id, d in docs.items():
@@ -144,11 +143,22 @@ def _order(docs: dict[str, dict]) -> list[dict]:
 
     ordered: list[str] = []
 
+    def subtree_order(node: dict) -> int:
+        """Smallest authored order under ``node`` — a hub's order wins where there is one."""
+        best = node.get("hub_order", DEFAULT_ORDER)
+        for _name, child in node.get("dirs", {}).items():
+            best = min(best, subtree_order(child))
+        for doc_id in node.get("docs", []):
+            best = min(best, docs[doc_id]["order"])
+        return best
+
     def walk(node: dict) -> None:
         # Interleave this directory's pages and subdirectories by authored order.
         entries: list[tuple] = []
         for name, child in node.get("dirs", {}).items():
-            entries.append((child.get("hub_order", DEFAULT_ORDER), 0, name, ("dir", child)))
+            hub_order = child.get("hub_order")
+            key = hub_order if hub_order is not None else subtree_order(child)
+            entries.append((key, 0, name, ("dir", child)))
         for i in node.get("docs", []):
             d = docs[i]
             entries.append((d["order"], 0 if d["is_hub"] else 1, d["title"].lower(), ("doc", i)))
@@ -209,7 +219,6 @@ class DocsLoader(LoaderObject):
                 "has_page": doc.get("has_page", True),
                 "order": doc["order"],
                 "source": doc["source"],
-                "headings": headings(_MD, doc["body"]),
                 "prev": {"url": f"/{prev['id']}/", "title": prev["title"]} if prev else None,
                 "next": {"url": f"/{nxt['id']}/", "title": nxt["title"]} if nxt else None,
             }

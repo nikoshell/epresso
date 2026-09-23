@@ -1,7 +1,9 @@
 ---
-title: epresso
+order: 0
 description: A modern, Python-first static site generator.
 ---
+
+# epresso
 
 ![epresso](/epresso.png)
 

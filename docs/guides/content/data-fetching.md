@@ -1,3 +1,7 @@
+---
+order: 314
+---
+
 # Data fetching
 
 Content collections are loaded from disk (glob) or from a **loader** function,

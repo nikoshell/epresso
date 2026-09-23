@@ -49,7 +49,9 @@ class DevServer:
         self.host = host
         self.port = port
         self.clients: set[WebSocket] = set()
-        # Dev serves source files un-hashed, so asset() must return un-hashed URLs.
+        # Dev serves source files un-hashed. `Site.load(dev=True)` sets this before
+        # the load so the rendered-body cache key stays stable; repeated here for a
+        # server constructed around an already-loaded site.
         site.config.assets.hash = False
         self._search_index_generated = False
 

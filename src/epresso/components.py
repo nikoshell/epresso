@@ -43,6 +43,19 @@ def _scope_hash(name: str) -> str:
     return hashlib.sha1(("component:" + name).encode()).hexdigest()[:8]
 
 
+def _references(code: CodeType, names: set[str]) -> bool:
+    """Whether a compiled code object — or a nested function/comprehension —
+    reads any of ``names``.
+
+    Decides whether a component's frontmatter is render-independent: one that
+    never mentions ``site``/``props`` yields the same namespace every time and
+    can be executed once (see :func:`_parse_component`).
+    """
+    if names.intersection(code.co_names):
+        return True
+    return any(isinstance(c, CodeType) and _references(c, names) for c in code.co_consts)
+
+
 # ---- author-scope tracking (an element is scoped to its author) ----------
 # An element's scope is the component whose template *authored* it, not the one
 # that renders it. A render-scope stack tracks the component currently emitting
@@ -202,6 +215,13 @@ def _resolve_namespaced_component(env: Any, name: str) -> Path | None:
 _FRAGMENT_OPEN = re.compile(r"<\s*Fragment\b([^>]*?)>", re.IGNORECASE | re.DOTALL)
 _FRAGMENT_CLOSE = re.compile(r"</\s*Fragment\s*>", re.IGNORECASE)
 
+# Cheap pre-checks: the hooks below do a char-by-char scan, and almost every
+# component instance passes content with no marker at all. These match
+# `<Fragment` / `</Fragment` / `<>` / `</>` (whitespace tolerated after `<`),
+# and — for slots — a `slot="…"` attribute with the same `(?<![-\w])` guard
+# used by the attribute scan below.
+_FRAGMENT_MARKER = re.compile(r"<\s*/?\s*(?:>|fragment\b)", re.IGNORECASE)
+
 
 def _find_fragment_close(text: str, start: int) -> tuple[int, int] | None:
     """Return (start, end) of the ``</Fragment>`` matching the ``<Fragment>`` that
@@ -265,7 +285,7 @@ def _strip_slot_attr(tag: str) -> str:
 def unwrap_fragments(html: str) -> str:
     """Drop ``<Fragment>``/``</Fragment>`` and ``<>``/``</>`` markers, keeping their
     contents, so a template can group siblings without emitting a wrapper node."""
-    if "<" not in html:
+    if _FRAGMENT_MARKER.search(html) is None:
         return html
     out: list[str] = []
     i = 0
@@ -324,6 +344,14 @@ def _extract_slots(content: str) -> tuple[str, dict[str, str]]:
     # Coerce: callers pass Markup sometimes, and `str + Markup` would escape the
     # left operand via Markup.__radd__ (slots are re-wrapped at the call site).
     content = str(content)
+    # The slot-marker pattern is exactly `_FRAGMENT_MARKER` plus a `slot=`
+    # alternative, and on a 250 KB content string it costs ~6 ms (measured 6.3 ms
+    # against 0.58 ms for the fragment half — the lookbehind plus the alternation
+    # is tried at every `<`). The literal test settles the slot half for ~0.14 ms,
+    # and with no `slot` in the content the two patterns agree, so this skips the
+    # regex without changing which content takes the slow path.
+    if "slot" not in content and _FRAGMENT_MARKER.search(content) is None:
+        return content, {}
     slots: dict[str, str] = {}
     out: list[str] = []
     i = 0
@@ -429,15 +457,21 @@ def _expand_slots(body: str) -> str:
     return body
 
 
-def _parse_component(path: Path, environment: Any):
+def _parse_component(path: Path, environment: Any, site: Any = None):
     """Parse a .ep component once per (path, mtime, env) and cache it.
 
     Returns ``(frontmatter, body, scoped_css, scripts, global_css, fm_code,
-    compiled)`` where ``fm_code`` is the compiled (not executed) frontmatter and
-    ``compiled`` is the pre-compiled Jinja body template. The frontmatter is only
-    *compiled* here so syntax errors surface at parse time; it is *executed* per
-    render in :func:`_render_epresso_component` with ``site``/``props`` in scope
-    because it may compute values from the current site.
+    compiled, compiled_scoped, compiled_global, static_ns)`` where ``fm_code``
+    is the compiled frontmatter, ``compiled`` is the pre-compiled Jinja body
+    template, ``compiled_scoped``/``compiled_global`` are the pre-compiled CSS
+    templates (``None`` when absent), and ``static_ns`` is the *executed*
+    frontmatter namespace for render-independent frontmatter — ``None`` when the
+    frontmatter reads ``site``/``props`` and must therefore run per render.
+
+    ``site`` is used only to reach plugin source transforms. Those run before
+    slot expansion, and the cache is keyed on ``id(environment)`` — a fresh
+    environment per load, and transforms re-register at ``on_setup`` before any
+    render — so a cached entry can never predate a transform's registration.
     """
     try:
         mtime = path.stat().st_mtime
@@ -472,8 +506,40 @@ def _parse_component(path: Path, environment: Any):
             fm_code = compile(frontmatter, str(path), "exec", dont_inherit=True)
         except Exception as e:  # noqa: BLE001
             raise TemplateError(f"error in component {path.name!r} frontmatter: {e}") from e
+    # Plugin source transforms run *before* slot expansion, so a transform sees
+    # the body as the author wrote it (``<slot/>`` still a tag, JSX component tags
+    # still JSX) and any marker it leaves survives into the rendered output.
+    if site is not None:
+        body = site._apply_source_transforms(body, kind="component", path=str(path))
     compiled = environment.from_string(_expand_slots(body))
-    parsed = (frontmatter, body, scoped_css, scripts, global_css, fm_code, compiled)
+    # Compile the CSS templates here too: they render once per component
+    # *instance*, but only change with the file, so compiling them per render
+    # recompiled the same stylesheet thousands of times in a real build.
+    compiled_scoped = environment.from_string(scoped_css) if scoped_css.strip() else None
+    compiled_global = environment.from_string(global_css) if global_css.strip() else None
+    # Frontmatter that never reads `site`/`props` (a constant lookup table, pure
+    # helpers) produces the same namespace on every render, so execute it once
+    # here. Frontmatter that depends on the render re-executes below.
+    static_ns: dict[str, Any] | None = None
+    if fm_code is not None and not _references(fm_code, {"site", "props"}):
+        static_ns = {k: v for k, v in environment.globals.items() if k not in ("site", "_render_session")}
+        static_ns["__name__"] = "_epresso_component"
+        try:
+            exec(fm_code, static_ns)
+        except Exception as e:  # noqa: BLE001
+            raise TemplateError(f"error in component {path.name!r} frontmatter: {e}") from e
+    parsed = (
+        frontmatter,
+        body,
+        scoped_css,
+        scripts,
+        global_css,
+        fm_code,
+        compiled,
+        compiled_scoped,
+        compiled_global,
+        static_ns,
+    )
     if len(_COMPONENT_CACHE) >= 500:
         _COMPONENT_CACHE.clear()
     _COMPONENT_CACHE[key] = parsed
@@ -483,18 +549,32 @@ def _parse_component(path: Path, environment: Any):
 def _render_epresso_component(
     site: Any, session: Any, name: str, path: Path, content: str, kwargs: dict[str, Any], environment: Any
 ) -> str:
-    _frontmatter, _body, scoped_css, scripts, global_css, fm_code, compiled = _parse_component(path, environment)
-    # Execute the frontmatter per render with `site` and the raw
-    # passed props in scope, so components can compute values (e.g. config
-    # lookups) at the top level and reference them straight in the body.
-    # Globals first so a component can shadow one, and so `cn` / the variant helpers
-    # are usable in the frontmatter without importing from the site's private `_lib`.
-    namespace: dict[str, Any] = {**environment.globals, "site": site, "props": dict(kwargs)}
-    if fm_code is not None:
-        try:
-            exec(fm_code, namespace)
-        except Exception as e:  # noqa: BLE001
-            raise TemplateError(f"error in component {name!r} frontmatter: {e}") from e
+    (
+        _frontmatter,
+        _body,
+        _scoped_css,
+        scripts,
+        _global_css,
+        fm_code,
+        compiled,
+        scoped_tmpl,
+        global_tmpl,
+        static_ns,
+    ) = _parse_component(path, environment, site)
+    # Frontmatter that never reads `site`/`props` already ran once in
+    # `_parse_component`; anything else executes per render with `site` and the
+    # raw passed props in scope so it can compute values from the current site.
+    # Globals first so a component can shadow one, and so `cn` / the variant
+    # helpers are usable in the frontmatter without importing the site's `_lib`.
+    if static_ns is not None:
+        namespace = static_ns
+    else:
+        namespace = {**environment.globals, "site": site, "props": dict(kwargs)}
+        if fm_code is not None:
+            try:
+                exec(fm_code, namespace)
+            except Exception as e:  # noqa: BLE001
+                raise TemplateError(f"error in component {name!r} frontmatter: {e}") from e
 
     props_model = namespace.get("Props")
     props = dict(kwargs)
@@ -543,14 +623,14 @@ def _render_epresso_component(
         # <Fragment>/<> group siblings without emitting a node.
         html = unwrap_fragments(html)
 
-        if scoped_css.strip():
-            rendered_css = environment.from_string(scoped_css).render(**ctx)
+        if scoped_tmpl is not None:
+            rendered_css = scoped_tmpl.render(**ctx)
             session.add_scoped_css(scope, rendered_css)
             from .scoped import inject_scope_attr
 
             html = inject_scope_attr(html, scope)
-        if global_css.strip():
-            rendered = environment.from_string(global_css).render(**ctx)
+        if global_tmpl is not None:
+            rendered = global_tmpl.render(**ctx)
             style = session.dedup_global_css(rendered)
             if style:
                 # Global CSS lands in the <head> for full-document components (layout

@@ -1,9 +1,10 @@
 ---
-title: Build with components only
-order: 20
-draft: true
+order: 372
 description: Take a component library and a token stylesheet, and keep your own layout and pages.
+draft: true
 ---
+
+# Build with components only
 
 > **Partly available.** Component layers work today — see
 > [Layers](guides/extending/layers.md). A library's component files layer in;
@@ -116,8 +117,8 @@ class Props(BaseModel):
 
 ## See also
 
-- [Components](../basics/components.md) — the `.ep` format, props and scoped CSS.
-- [Styling and CSS](../guides/styling/styling.md) — assets, tokens and
+- [Components](basics/components.md) — the `.ep` format, props and scoped CSS.
+- [Styling and CSS](guides/styling/styling.md) — assets, tokens and
   PostCSS/Tailwind.
 - [Use a theme as a layer](guides/themes/planned/use-a-theme.md) — the same
   mechanism, for whole themes.

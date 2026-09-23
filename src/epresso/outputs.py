@@ -7,6 +7,7 @@ produced them via an endpoint/pages file.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -253,22 +254,48 @@ def write_rss(site: Any, out_dir: Path, routes: list[Any]) -> None:
 
 
 def write_search_index(site: Any, out_dir: Path, routes: list[Any], rendered: dict[str, str]) -> None:
-    """Build a BM-25 search index (core, no lunr) over page sections."""
+    """Build a BM-25 search index over page sections, one file per top-level section.
+
+    A whole-site index is one download for a reader who usually searches the
+    section they are in — 15.6 MB raw on a 997-page corpus. Sections are written
+    as separate files plus a small manifest at ``[search] index``; the overlay
+    fetches the current section first and the rest in the background. A site with
+    a single top-level section keeps the old one-file shape.
+    """
     if not site.config.search.enabled:
         return
     from . import search
 
-    units: list[dict[str, Any]] = []
+    buckets: dict[str, list[dict[str, Any]]] = {}
     for r in routes:
         if not _is_html_page(r.path):
             continue
         html = rendered.get(r.path)
         if html is None:
             continue
-        units.extend(search.split_sections(html, r.path))
+        top = r.path.strip("/").split("/")[0] if r.path != "/" else ""
+        buckets.setdefault(top, []).extend(search.split_sections(html, r.path))
 
     out = out_dir / site.config.search.index
-    if not units:
+    if not buckets:
         out.write_text("{}", encoding="utf-8")
         return
-    out.write_text(search.serialize(search.build_index(units)), encoding="utf-8")
+
+    if len(buckets) <= 1:
+        units = next(iter(buckets.values()), [])
+        out.write_text(search.serialize(search.build_index(units)), encoding="utf-8")
+        return
+
+    section_dir = out.parent / out.stem  # search-index.json -> search-index/
+    section_dir.mkdir(parents=True, exist_ok=True)
+    manifest: list[dict[str, Any]] = []
+    for name, units in sorted(buckets.items()):
+        slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-").lower() or "root"
+        (section_dir / f"{slug}.json").write_text(
+            search.serialize(search.build_index(units)), encoding="utf-8"
+        )
+        manifest.append({"name": name, "file": f"{section_dir.name}/{slug}.json", "units": len(units)})
+    out.write_text(
+        search.serialize({"version": 3, "sections": manifest, "units": sum(m["units"] for m in manifest)}),
+        encoding="utf-8",
+    )

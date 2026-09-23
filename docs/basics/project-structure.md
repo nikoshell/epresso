@@ -1,3 +1,7 @@
+---
+order: 110
+---
+
 # Project structure
 
 By default everything lives at the project root. `site.toml` and
@@ -20,39 +24,6 @@ styles/              # global stylesheets (global.css)
 assets/              # buildable assets (images, js); top-level files land at root
 public/              # files copied verbatim to the output root
 ```
-
-## Optional `src/`
-
-When a top-level `src/` directory exists, the source directories above are
-resolved **inside it** instead — the same convention Astro and Nuxt use. Nothing
-has to be configured:
-
-```tree
-site.toml            # stays at the root
-content.config.py    # stays at the root
-public/              # stays at the root
-dist/                # output, stays at the root
-src/
-  pages/
-  layouts/
-  components/
-  content/
-  styles/
-  assets/
-```
-
-`[build]` directory names in `site.toml` are unchanged — `pages`, `layouts`,
-`components`, … — they are simply resolved relative to the source root (`src/`
-when present, the project root otherwise).
-
-Collection `base` paths in `content.config.py` are resolved the same way, so
-`base="./content/posts"` means `src/content/posts` in a `src/` project and
-`content/posts` otherwise. A root → `src/` migration is a `git mv`, with no
-config edits.
-
-> Because `src/` is detected automatically, an existing project that keeps
-> unrelated code in a top-level `src/` would have its source dirs looked up
-> inside it. Rename that directory if it is not site source.
 
 ## `public/`, `assets/` or `styles/`?
 
@@ -83,7 +54,7 @@ only uses `public/` can delete `assets/` and `styles/`.
 
 Collections are defined in `content.config.py`; a directory like `blog/` becomes
 a collection by pointing `define_collection(..., base="./blog")` at it. Collection
-`base` paths are relative to the source root (see above).
+`base` paths are relative to the project root.
 
 ## Layers
 
@@ -96,4 +67,4 @@ use = ["./vendor/components", "pkg:epresso_ui", "github:owner/epresso-components
 ```
 
 The site's own roots are always searched first. See
-[Layers](../guides/extending/layers.md).
+[Layers](guides/extending/layers.md).

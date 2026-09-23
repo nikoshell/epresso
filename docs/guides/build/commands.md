@@ -1,7 +1,8 @@
 ---
-order: 40
+order: 331
 ---
-# Develop and build
+
+# Commands
 
 ## Development server
 

@@ -59,16 +59,80 @@
         return String(s || "").toLowerCase().match(/[^\W_]+/g) || [];
     }
 
-    function load() {
-        if (loaded) return Promise.resolve();
-        loaded = true;
-        return fetch((window.EPRESSO_BASE || "") + "/search-index.json")
+    var merged = {
+        version: 2,
+        units: [],
+        index: {}
+    };
+    var mergedCount = 0;
+
+    function mergeSection(data) {
+        var units = data.units || [];
+        var idx = data.index || {};
+        for (var i = 0; i < units.length; i++) merged.units.push(units[i]);
+        Object.keys(idx).forEach(function(term) {
+            var posts = merged.index[term] || (merged.index[term] = []);
+            var src = idx[term];
+            for (var k = 0; k < src.length; k++) posts.push([src[k][0] + mergedCount, src[k][1]]);
+        });
+        mergedCount += units.length;
+        allTerms = Object.keys(merged.index);
+    }
+
+    function loadSection(base, file) {
+        return fetch(base + "/" + file)
             .then(function(r) {
                 return r.json();
             })
             .then(function(data) {
-                index = data;
-                allTerms = Object.keys(data.index || {});
+                mergeSection(data);
+            })
+            .catch(function() {});
+    }
+
+    /* One index for the whole site, or — when the build split it by top-level
+       section — a manifest. Fetch the section the reader is in first, then the
+       rest in the background, so the first search doesn't wait on every
+       section. Results re-rank as the remaining sections arrive. */
+    function load() {
+        if (loaded) return Promise.resolve();
+        loaded = true;
+        var base = window.EPRESSO_BASE || "";
+        return fetch(base + "/search-index.json")
+            .then(function(r) {
+                return r.json();
+            })
+            .then(function(data) {
+                if (!data.sections) {
+                    index = data;
+                    allTerms = Object.keys(data.index || {});
+                    return;
+                }
+                var here = decodeURIComponent((location.pathname || "/").replace(/^\/+/, "").split("/")[0]);
+                var sections = data.sections,
+                    first = null,
+                    i;
+                for (i = 0; i < sections.length; i++) {
+                    if (sections[i].name === here) {
+                        first = sections[i];
+                        break;
+                    }
+                }
+                if (!first) {
+                    for (i = 0; i < sections.length; i++) {
+                        if (sections[i].name === "") {
+                            first = sections[i];
+                            break;
+                        }
+                    }
+                }
+                first = first || sections[0];
+                return loadSection(base, first.file).then(function() {
+                    index = merged;
+                    for (i = 0; i < sections.length; i++) {
+                        if (sections[i] !== first) loadSection(base, sections[i].file);
+                    }
+                });
             })
             .catch(function() {
                 index = null;

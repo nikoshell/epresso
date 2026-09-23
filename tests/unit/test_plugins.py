@@ -1,6 +1,8 @@
 """Plugin API tests — capability registry: hooks, ordering, dedup, phases,
 contributions (globals/filters/collections/markdown-ext/html transforms)."""
 
+import pytest
+
 from epresso.errors import PluginError
 from epresso.plugins import CapabilityError, Plugin
 from epresso.site import Site
@@ -146,6 +148,152 @@ def test_html_transform_disables_route_reuse_but_build_is_idempotent():
     site = _build({"pages/index.ep": "---\n---\n<p>a</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
     site.build()  # second build must not double-apply (transforms reset each load)
     assert _out(site).count("<!-- t -->") == 1
+
+
+def test_source_transform_rewrites_page_and_component_source():
+    """A source transform reaches both `.ep` bodies, and sees the author's text."""
+    seen = []
+
+    def on_setup(caps):
+        def transform(source, ctx):
+            seen.append((ctx["kind"], ctx["path"]))
+            return source.replace("<p>", "<p data-marked>")
+
+        caps.add_source_transform(transform)
+
+    site = _build(
+        {
+            "components/Box.ep": "---\n---\n<p>inside</p>",
+            "pages/index.ep": "---\n---\n<div>\n<Box />\n<p>page</p>\n</div>",
+        },
+        Plugin(name="marker", hooks={"on_setup": on_setup}),
+    )
+    out = _out(site)
+    assert out.count("data-marked") == 2  # the page's <p> and the component's
+    kinds = {kind for kind, _ in seen}
+    assert kinds == {"page", "component"}
+    # `path` identifies the file, so a transform need not guess.
+    assert any(p.endswith("index.ep") for _, p in seen)
+
+
+def test_source_transform_runs_before_slot_and_jsx_rewriting():
+    """The transform sees authored syntax, not a half-desugared body.
+
+    Slots are expanded and JSX component tags rewritten by epresso *after* plugins
+    run, so both are still in their source form when a transform is handed the
+    body. This is the property source-anchored tooling depends on.
+    """
+    seen = {}
+
+    def on_setup(caps):
+        def transform(source, ctx):
+            if ctx["kind"] == "component":
+                seen["component_body"] = source
+            return source
+
+        caps.add_source_transform(transform)
+
+    _build(
+        {
+            "layouts/Base.ep": "---\n---\n<main><slot /></main>",
+            "pages/index.ep": "---\n---\n<Base><p>x</p></Base>",
+        },
+        Plugin(name="spy", hooks={"on_setup": on_setup}),
+    )
+    body = seen["component_body"]
+    assert "<slot />" in body  # not yet `{{ content | safe }}`
+    assert "{{ content" not in body
+
+
+def test_source_transform_reaches_pages_and_does_not_double_apply():
+    """Transforms reset each load, so a second build applies them exactly once."""
+
+    def on_setup(caps):
+        caps.add_source_transform(lambda source, ctx: source.replace("<p>", "<p data-t>"))
+
+    site = _build({"pages/index.ep": "---\n---\n<p>a</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
+    site.build()
+    assert _out(site).count("data-t") == 1
+
+
+def test_source_transform_disables_route_reuse():
+    """A source transform rewrites the template, so cached output must not be reused.
+
+    Without this the second build would serve bytes rendered from the previous
+    template and silently drop whatever the transform now contributes.
+    """
+
+    def on_setup(caps):
+        caps.add_source_transform(lambda source, ctx: source)
+
+    site = _build({"pages/index.ep": "---\n---\n<p>a</p>"}, Plugin(name="t", hooks={"on_setup": on_setup}))
+    site.build()
+    assert site.build().skipped == 0  # nothing reused
+
+
+def test_source_transform_requires_a_target():
+    """Against a host without the capability the plugin gets a clear error."""
+    from epresso.plugins import Capabilities
+
+    plugin = Plugin(name="p")
+    caps = Capabilities(plugin, object(), "on_setup")
+    with pytest.raises(CapabilityError, match="source-transform target"):
+        caps.add_source_transform(lambda source, ctx: source)
+
+
+def test_env_var_plugins_load_without_writing_to_the_project(tmp_path, monkeypatch):
+    """A host tool instruments a project it must not write to.
+
+    The plugin is not in the project and not in ``[plugins]``: it arrives on
+    ``PYTHONPATH`` with ``EPRESSO_PLUGINS`` naming it. That is the whole point of
+    the channel — an editor must not edit somebody's site.toml or leave a
+    plugins.py in their tree just to look at the site.
+    """
+    module_dir = tmp_path / "hostplugins"
+    module_dir.mkdir()
+    (module_dir / "host_probe.py").write_text(
+        "from epresso.plugins import Plugin\n"
+        "def _on_setup(caps):\n"
+        "    caps.add_global('from_host', lambda: 'host-plugin-ran')\n"
+        "probe = Plugin(name='host-probe', hooks={'on_setup': _on_setup})\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(module_dir))
+    monkeypatch.setenv("EPRESSO_PLUGINS", "host_probe:probe")
+
+    site = _build({"pages/index.ep": "---\n---\n{{ from_host() }}"})
+    assert "host-plugin-ran" in _out(site)
+
+
+def test_env_var_plugins_are_additive(tmp_path, monkeypatch):
+    """The project's own plugins still load; the host only adds."""
+    from epresso.plugins import Plugin
+
+    module_dir = tmp_path / "hostplugins"
+    module_dir.mkdir()
+    (module_dir / "host_two.py").write_text(
+        "from epresso.plugins import Plugin\ntwo = Plugin(name='host-two', hooks={'on_setup': lambda caps: None})\n",
+        encoding="utf-8",
+    )
+    monkeypatch.syspath_prepend(str(module_dir))
+    monkeypatch.setenv("EPRESSO_PLUGINS", "host_two:two")
+
+    root = tmp_path / "project"
+    root.mkdir()
+    (root / "pages").mkdir()
+    (root / "pages" / "index.ep").write_text("---\n---\nx", encoding="utf-8")
+    (root / "site.toml").write_text('[site]\nname = "t"\n', encoding="utf-8")
+    site = Site.load(root)
+    site.plugins.register(Plugin(name="from-project", hooks={"on_setup": lambda caps: None}))
+    names = {p.name for p in site.plugins.plugins}
+    assert "host-two" in names
+    assert "from-project" in names
+
+
+def test_blank_env_plugin_specs_are_ignored(monkeypatch):
+    """An empty or whitespace value is unset, not a spec named ""."""
+    monkeypatch.setenv("EPRESSO_PLUGINS", "  ,  ")
+    _build({"pages/index.ep": "---\n---\nx"})
 
 
 def test_register_collection_before_load_populates_store():

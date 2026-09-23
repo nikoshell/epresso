@@ -10,7 +10,10 @@ branch = "main"
 
 [build]
 trailing_slash = "always"
-compress_html = true
+# Off: the host gzips/brotlis the response anyway, and gzip removes the same
+# whitespace — on a 997-page corpus minify_html cost ~9 s of the build (19 %)
+# for ~1 % of the transfer size (35.9 -> 36.3 MB gz).
+compress_html = false
 components = "components"
 layouts = "layouts"
 # Public base stays at the root: production is served from the custom domain
@@ -42,10 +45,14 @@ url_template = ""
 [theme]
 # Which subdir of the source repo holds the docs (e.g. "docs" or "_posts").
 # Override with the EPRESSO_DOCS_DIR env var.
+docs_dir = "docs"
 # Page actions (copy page + markdown menu) are on by default; set this to
 # false to hide the button/menu and drop the per-page .md routes too.
 # page_actions = false
-docs_dir = "docs"
+# Sidebar: once the nav has more rows than this (directories + pages), the
+# top-level sections fold — the section holding the current page stays open.
+# Raise it for a wider tree, lower it to fold sooner.
+nav_collapse_after = 50
 # The repo this theme documents when run at its own directory (self-build), as a
 # path relative to this theme dir. No parent-walking: it's an explicit declaration.
 repo = "../.."
@@ -57,3 +64,47 @@ repo = "../.."
 #   { label = "Documentation", href = "/" },
 #   { label = "GitHub", href = "https://github.com/nikoshell/epresso" },
 # ]
+
+# Old paths from before the docs tree was reordered (2026-09-22): the section
+# "Develop and build" folded into "Build & tooling", and "Editor setup" moved
+# under Guides. Redirects keep the published URLs working.
+[[redirects]]
+"/develop-and-build/" = "/guides/build/commands/"
+
+[[redirects]]
+"/develop-and-build/cli/" = "/reference/cli/"
+
+[[redirects]]
+"/editor-setup/" = "/guides/editor-setup/"
+
+# Sections are groups of pages, not landing pages: their README.md landings were
+# removed (2026-09-22), so each old section URL points at its first page.
+[[redirects]]
+"/basics/" = "/basics/project-structure/"
+
+[[redirects]]
+"/concepts/" = "/concepts/why-epresso/"
+
+[[redirects]]
+"/guides/" = "/guides/content/markdown/"
+
+[[redirects]]
+"/guides/content/" = "/guides/content/markdown/"
+
+[[redirects]]
+"/guides/styling/" = "/guides/styling/styling/"
+
+[[redirects]]
+"/guides/build/" = "/guides/build/commands/"
+
+[[redirects]]
+"/guides/extending/" = "/guides/extending/layers/"
+
+[[redirects]]
+"/guides/behavior/" = "/guides/behavior/prefetch/"
+
+[[redirects]]
+"/guides/themes/" = "/guides/themes/new-website/"
+
+[[redirects]]
+"/reference/" = "/reference/template-directives/"

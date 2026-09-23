@@ -57,13 +57,39 @@ def minify_html(html: str) -> str:
     return re.sub(_PLACEHOLDER_RE, restore, html)
 
 
+# Remove comments in a single pass that also matches quoted strings, so each is
+# consumed as a unit: a `/*` inside a string is not read as a comment, and a quote
+# inside a comment is not read as a string. Two stashed passes instead let one
+# unbalanced quote in a comment swallow every rule after it.
+_CSS_STRING = re.compile(r'"[^"]*"|\'[^\']*\'')
+_CSS_COMMENT_OR_STRING = re.compile(r'"[^"]*"|\'[^\']*\'|/\*[\s\S]*?\*/')
+
+
+def _drop_comment(m: re.Match[str]) -> str:
+    text = m.group(0)
+    if text.startswith("/*"):
+        return text if text.startswith("/*!") else ""  # keep license banners
+    return text  # a quoted string
+
+
 def minify_css(css: str) -> str:
     """Minify CSS: strip comments and collapse whitespace around structural characters.
 
-    Whitespace inside strings and around ``calc()`` operators (``+ - * /``) is
-    preserved, so it is safe for the theme stylesheets.
+    ``/*! … */`` banners are kept, since they carry a stylesheet's license, and the
+    contents of quoted strings are left byte-for-byte — only whitespace *between*
+    declarations is collapsed. Whitespace around ``calc()`` operators (``+ - * /``)
+    is preserved, so it is safe for the theme stylesheets.
     """
-    css = re.sub(r"/\*[\s\S]*?\*/", "", css)  # comments
+    css = _CSS_COMMENT_OR_STRING.sub(_drop_comment, css)
+
+    # Stash strings so the collapsing passes cannot touch their contents.
+    kept: list[str] = []
+
+    def stash(m: re.Match[str]) -> str:
+        kept.append(m.group(0))
+        return f"\x01{len(kept) - 1}\x01"
+
+    css = _CSS_STRING.sub(stash, css)
     css = re.sub(r"\s+", " ", css)  # collapse runs of whitespace
     # drop spaces around structural chars (not +/-/*// so calc() stays intact).
     # `:` is handled separately: a space before a pseudo-class (`:hover`, `:not`, …)
@@ -73,4 +99,5 @@ def minify_css(css: str) -> str:
     css = re.sub(r"\s*([{};,>~])\s*", r"\1", css)
     css = re.sub(r":\s+", ":", css)
     css = css.replace("( ", "(").replace(" )", ")")
-    return css.strip()
+    css = css.strip()
+    return re.sub(r"\x01(\d+)\x01", lambda m: kept[int(m.group(1))], css)

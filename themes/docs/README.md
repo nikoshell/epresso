@@ -33,6 +33,7 @@ All theme options live in `[theme]` in `site.toml`. Each is overridable with an
 | `docs_dir`  | `EPRESSO_DOCS_DIR`   | `docs`  | which subdir of the source repo holds the docs (e.g. `docs`, `_posts`) |
 | `docs_base` | `EPRESSO_DOCS_BASE`  | `""`    | extra URL prefix (e.g. `/docs/` on GitHub Pages) |
 | `page_actions` | — | `true` | copy-page button + markdown menu, and the per-page `<page>.md` routes they use (set `false` to drop both) |
+| `nav_collapse_after` | — | `40` | fold the top-level sidebar sections once the nav has more rows than this (directories + pages); the section holding the current page stays open |
 
 ### Footer
 
@@ -89,6 +90,26 @@ The `PageActions` control above the article uses it:
 
 The `.md` files are excluded from the sitemap, `llms.txt` and the search index
 (they aren't HTML pages) and count as endpoints in the build summary.
+
+On a very large corpus (thousands of docs) this is worth turning off: at ~1,000
+pages it is ~1,000 extra routes and ~13 MB of output, for a menu most readers
+never open. `[theme] page_actions = false`.
+
+## Sidebar & search
+
+The sidebar shows the **full nested tree** — the first level always expanded,
+deeper directories open/closed with native `<details>`. Above `nav_collapse_after`
+rows (default 40, `[theme] nav_collapse_after` in `site.toml`) the top level folds
+too, with the current page's section opened by a small script (no JS: the tree
+still works, it is just not highlighted). The tree is identical on every page, so
+it is rendered **once per build** and the current-page marker is applied
+client-side; at 997 docs the nav is ~220 KB of a ~250 KB page.
+
+The search index is **split by top-level section**: a small `search-index.json`
+manifest plus one `search-index/<section>.json` per section. The overlay fetches
+the section the reader is in first and the rest in the background, so the first
+search does not download the whole site's index (4.9 MB gzipped for 997 pages).
+A site with a single top-level section keeps the one-file index.
 
 ## Layout
 

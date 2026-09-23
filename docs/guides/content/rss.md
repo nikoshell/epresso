@@ -1,3 +1,7 @@
+---
+order: 316
+---
+
 # RSS
 
 epresso can emit an RSS/Atom feed from any content collection. It's configured

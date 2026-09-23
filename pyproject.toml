@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.4.0"
+version = "0.5.0"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"

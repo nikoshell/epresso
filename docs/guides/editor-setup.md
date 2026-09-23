@@ -1,3 +1,7 @@
+---
+order: 380
+---
+
 # Editor setup
 
 epresso ships editor support for the `.ep` file format (Python frontmatter +

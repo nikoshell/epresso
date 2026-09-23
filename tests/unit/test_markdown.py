@@ -63,3 +63,34 @@ def test_code_component_per_language_routing():
     # default language still routes to the default Highlight component
     py = render_markdown("```python\nx = 1\n```\n", cfg)
     assert "Highlight" in py.html
+
+
+def test_rust_backend_reports_unavailable():
+    """Selecting an uninstalled backend fails loudly, it does not fall back."""
+    from epresso.config import MarkdownConfig
+    from epresso.errors import ContentError
+
+    try:
+        render_markdown("# x\n", MarkdownConfig(backend="rust"))
+    except ContentError as e:
+        assert "rust" in str(e)
+    else:
+        raise AssertionError("expected ContentError for an uninstalled backend")
+
+
+def test_body_is_parsed_once_per_render(monkeypatch):
+    """Headings/images come from the render's token stream, not a second parse."""
+    from markdown_it import MarkdownIt
+
+    calls = {"n": 0}
+    original = MarkdownIt.parse
+
+    def counting(self, src, env=None):
+        calls["n"] += 1
+        return original(self, src, env)
+
+    monkeypatch.setattr(MarkdownIt, "parse", counting)
+    r = render_markdown("# One\n\n## Two\n\n![i](./a.png)\n", _cfg())
+    assert calls["n"] == 1
+    assert [h["slug"] for h in r.metadata["headings"]] == ["one", "two"]
+    assert r.metadata["image_paths"] == ["./a.png"]

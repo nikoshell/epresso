@@ -1,3 +1,7 @@
+---
+order: 354
+---
+
 # Type checking & tooling
 
 epresso is **Python**, so there is no TypeScript layer — types come from Python

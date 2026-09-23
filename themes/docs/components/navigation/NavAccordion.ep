@@ -1,20 +1,9 @@
 ---
 from markupsafe import Markup, escape
 
-# Same path as Icon.ep's "caret" (shared by PageActions.ep). Duplicated here
-# because this markup is built as a Python string, not template composition,
-# so a <Icon/> tag in it would never be expanded.
-_CARET = '<path fill="currentColor" d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>'
-
-
-def icon(class_name: str = "", size: int = 14) -> str:
-    """Wrap the caret path in an ``<svg>`` (viewBox 16×16, currentColor).
-
-    ``size`` sets the rendered width/height so the icon isn't the SVG default.
-    """
-    cls = f' class="{class_name}"' if class_name else ""
-    dims = f' width="{size}" height="{size}"'
-    return f'<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"{dims}{cls}>{_CARET}</svg>'
+# The caret path lives once, as a <symbol> in the body; each row references it
+# with <use>. Inlining the SVG per row cost ~320 B x 135 rows on every page.
+_CARET_REF = '<svg class="tree-caret" width="14" height="14" aria-hidden="true"><use href="#epresso-caret"/></svg>'
 
 
 def _build_tree(docs):
@@ -34,19 +23,23 @@ def _build_tree(docs):
     return root
 
 
-def render_sidebar(docs, current: str) -> Markup:
-    """Alternative sidebar:
-    - no folder/file directory icons (only a caret on collapsible sections)
-    - the FIRST level is always expanded (no collapse affordance)
-    - deeper directories open/close independently via native <details>
-      (no same-level auto-collapse).
-    """
-    docs = list(docs)
-    by_id = {d.id: d for d in docs}
-    root = _build_tree(docs)
-    active_entry = by_id.get(current)
-    active_path = list(active_entry.computed.get("group_path", [])) if active_entry else []
+# Default for `[theme] nav_collapse_after`: above this many nav rows (directories
+# + pages) the top-level sections fold — a 1000-page docs tree as one expanded
+# list is unnavigable, and the reader is usually looking for one section. The
+# section holding the current page stays open. A site overrides it in site.toml.
+_DEFAULT_COLLAPSE_AFTER = 40
 
+_INDEX_CACHE: dict[tuple, dict] = {}
+_NAV_CACHE: dict[tuple, str] = {}
+
+
+def _build_index(docs) -> dict:
+    """Group the docs once: the tree and its order map.
+
+    Identical for every page, so it is cached across pages (:func:`_index_for`)
+    instead of rebuilt for each of them.
+    """
+    root = _build_tree(docs)
     dir_min: dict[tuple, int] = {}
     for d in docs:
         gp = list((d.computed or {}).get("group_path", []))
@@ -55,6 +48,55 @@ def render_sidebar(docs, current: str) -> Markup:
             key = tuple(gp[:k])
             if o < dir_min.get(key, 10**9):
                 dir_min[key] = o
+    return {"root": root, "dir_min": dir_min}
+
+
+def _index_for(docs) -> dict:
+    """Cached :func:`_build_index` for the (stable) set of doc entries."""
+    key = (len(docs), id(docs[0]) if docs else 0)
+    hit = _INDEX_CACHE.get(key)
+    if hit is None:
+        hit = _build_index(docs)
+        if len(_INDEX_CACHE) >= 4:
+            _INDEX_CACHE.clear()
+        _INDEX_CACHE[key] = hit
+    return hit
+
+
+def render_sidebar(docs, collapse_after=None) -> Markup:
+    """The cached, unmarked sidebar markup.
+
+    The tree is identical on every page — the current page is marked
+    client-side (see this component's <script>) — so it is rendered once per
+    build rather than once per page. ``collapse_after`` comes from the theme's
+    ``[theme] nav_collapse_after`` (the body reads it, so this frontmatter stays
+    render-independent and is executed once per environment).
+    """
+    docs = list(docs)
+    return Markup(_nav_for(docs, collapse_after))
+
+
+def _nav_for(docs, collapse_after=None) -> str:
+    """Cached :func:`_build_nav` for the (stable) set of doc entries."""
+    key = (len(docs), id(docs[0]) if docs else 0, collapse_after)
+    hit = _NAV_CACHE.get(key)
+    if hit is None:
+        hit = _build_nav(docs, collapse_after)
+        if len(_NAV_CACHE) >= 4:
+            _NAV_CACHE.clear()
+        _NAV_CACHE[key] = hit
+    return hit
+
+
+def _build_nav(docs, collapse_after=None) -> str:
+    """The full nested sidebar: the first level is always expanded, deeper
+    directories open/close independently via native <details>."""
+    index = _index_for(docs)
+    dir_min = index["dir_min"]
+    root = index["root"]
+    rows = len(dir_min) + sum(1 for d in docs if d.id != "")
+    threshold = _DEFAULT_COLLAPSE_AFTER if collapse_after in (None, "") else int(collapse_after)
+    compact = rows > threshold
 
     def inner_for(node, name=""):
         hub = node["hub"]
@@ -63,8 +105,7 @@ def render_sidebar(docs, current: str) -> Markup:
             # A hub without a body is a category label only (no page to link to).
             if not (hub.computed or {}).get("has_page", True):
                 return f"<span>{escape(label)}</span>"
-            current_attr = ' aria-current="page"' if current == hub.id else ""
-            return f'<a href="/{escape(hub.id)}/"{current_attr}>{escape(label)}</a>'
+            return f'<a href="/{escape(hub.id)}/">{escape(label)}</a>'
         label = name.replace("-", " ").title() if name else ""
         return f"<span>{escape(label)}</span>"
 
@@ -83,17 +124,15 @@ def render_sidebar(docs, current: str) -> Markup:
                 child_path = path + [name]
                 hub = child["hub"]
                 depth = len(child_path)
-                hub_active = bool(hub) and (hub.computed or {}).get("has_page", True) and hub.id == current
                 _lv = depth - 1
-                indent_attr = f' style="--indent:calc({_lv} * 1.3rem + {_lv} * 1px)"' if _lv else ""
+                indent_attr = f' data-depth="{_lv}"' if _lv else ""
 
                 # A lone hub index = a plain leaf (no container). Without a page
                 # it is only a label.
                 if hub and not (child["dirs"] or child["docs"]):
                     if (hub.computed or {}).get("has_page", True):
-                        active = ' class="active" aria-current="page"' if hub.id == current else ""
                         parts.append(
-                            f'<li class="tree-leaf"{indent_attr}><a href="/{escape(hub.id)}/"{active}>{escape(hub.data.title)}</a></li>'
+                            f'<li class="tree-leaf"{indent_attr}><a href="/{escape(hub.id)}/">{escape(hub.data.title)}</a></li>'
                         )
                     else:
                         parts.append(f'<li class="tree-leaf"{indent_attr}><span>{escape(hub.data.title)}</span></li>')
@@ -102,33 +141,27 @@ def render_sidebar(docs, current: str) -> Markup:
                 children_html = render(child, child_path)
                 inner = inner_for(child, name)
 
-                if depth == 1:
-                    # FIRST level: always expanded, never collapsible, no caret/icons.
-                    head_cls = "tree-head active" if hub_active else "tree-head"
+                if depth == 1 and not compact:
+                    # FIRST level: always expanded, never collapsible, no caret/icons
+                    # (a nav this small does not need folding).
                     parts.append(
-                        f'<li class="tree-dir tree-top"><div class="{head_cls}">{inner}</div>{children_html}</li>'
+                        f'<li class="tree-dir tree-top"><div class="tree-head">{inner}</div>{children_html}</li>'
                     )
                 else:
-                    on_path = bool(active_path) and active_path[: len(child_path)] == child_path
-                    opened = (len(active_path) > len(child_path) and on_path) or (
-                        active_path == child_path and active_path and (hub is None or current != hub.id)
-                    )
-                    summary_attr = ' class="active"' if hub_active else ""
-                    # Caret on the right (except the always-open top level, which
-                    # has no caret at all).
+                    # Folded top level keeps `tree-top`, so its child list has no
+                    # guide line — the same look it has when expanded.
+                    top = " tree-top" if depth == 1 else ""
                     parts.append(
-                        f'<li class="tree-dir"{indent_attr}><details{" open" if opened else ""}>'
-                        f"<summary{summary_attr}>{inner}{icon('tree-caret', 14)}</summary>"
+                        f'<li class="tree-dir{top}"{indent_attr}><details>'
+                        f"<summary>{inner}{_CARET_REF}</summary>"
                         f"{children_html}</details></li>"
                     )
             else:
                 d = payload[1]
-                doc_depth = len(path) + 1
-                _dlv = doc_depth - 1
-                doc_indent = f' style="--indent:calc({_dlv} * 1.3rem + {_dlv} * 1px)"' if _dlv else ""
-                active = ' class="active" aria-current="page"' if d.id == current else ""
+                _dlv = len(path)
+                doc_indent = f' data-depth="{_dlv}"' if _dlv else ""
                 parts.append(
-                    f'<li class="tree-leaf"{doc_indent}><a href="/{escape(d.id)}/"{active}>{escape(d.data.title)}</a></li>'
+                    f'<li class="tree-leaf"{doc_indent}><a href="/{escape(d.id)}/">{escape(d.data.title)}</a></li>'
                 )
         parts.append("</ul>")
         return "".join(parts)
@@ -137,11 +170,12 @@ def render_sidebar(docs, current: str) -> Markup:
 ---
 
 <Fragment>
+    <svg class="tree-caret-defs" width="0" height="0" aria-hidden="true" style="position:absolute;overflow:hidden"><symbol id="epresso-caret" viewBox="0 0 16 16"><path fill="currentColor" d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/></symbol></svg>
     <div class="sidebar-scrim" aria-hidden="true"></div>
     <aside class="sidebar" id="sidebar-nav" aria-label="Documentation navigation">
         <div class="sidebar-inner">
             <nav>
-                {{ render_sidebar(props.docs, props.current) }}
+                {{ render_sidebar(props.docs, (site.config.theme or {}).get("nav_collapse_after")) }}
             </nav>
         </div>
     </aside>
@@ -155,6 +189,28 @@ def render_sidebar(docs, current: str) -> Markup:
     var sidebar = document.getElementById("sidebar-nav");
     var scrim = document.querySelector(".sidebar-scrim");
     if (!sidebar) return;
+
+    // The sidebar markup is cached across pages and carries no per-page state,
+    // so mark the current page here: highlight its link, mark the section head
+    // it lives under, and open its ancestors. Without JS the nav still works, it
+    // just is not highlighted, so this must never throw.
+    (function markCurrent() {
+        var path = location.pathname.replace(/\/?$/, "/");
+        var link = sidebar.querySelector('a[href="' + path + '"]');
+        if (!link) return;
+        link.classList.add("active");
+        link.setAttribute("aria-current", "page");
+        for (var el = link.parentElement; el && el !== sidebar; el = el.parentElement) {
+            if (el.tagName !== "LI" || !el.classList.contains("tree-dir")) continue;
+            var head = el.querySelector("summary, .tree-head");
+            if (head && head.contains(link)) {
+                head.classList.add("active");
+                continue;
+            }
+            var details = el.firstElementChild;
+            if (details && details.tagName === "DETAILS") details.open = true;
+        }
+    })();
 
     var mq = window.matchMedia("(max-width: 1024px)");
     var FOCUSABLE = 'a[href], button:not([disabled]), summary, input, [tabindex]:not([tabindex="-1"])';
@@ -326,6 +382,26 @@ def render_sidebar(docs, current: str) -> Markup:
 .tree-top>.tree {
     border-left: none;
 }
+
+/* Folded top level (see render_sidebar): the list now sits inside <details>. */
+.tree-top>details>.tree {
+    border-left: none;
+}
+
+/* Row depth -> the indent the active row's bar reaches back across. The markup
+   carries data-depth; the value lives here instead of in an inline style on
+   every row (1131 rows x ~44 B on a large corpus). Deeper than 10 keeps the
+   default 0 — the tree is nested, so only the bar's reach is affected. */
+.tree li[data-depth="1"] { --indent: calc(1 * 1.3rem + 1px); }
+.tree li[data-depth="2"] { --indent: calc(2 * 1.3rem + 2px); }
+.tree li[data-depth="3"] { --indent: calc(3 * 1.3rem + 3px); }
+.tree li[data-depth="4"] { --indent: calc(4 * 1.3rem + 4px); }
+.tree li[data-depth="5"] { --indent: calc(5 * 1.3rem + 5px); }
+.tree li[data-depth="6"] { --indent: calc(6 * 1.3rem + 6px); }
+.tree li[data-depth="7"] { --indent: calc(7 * 1.3rem + 7px); }
+.tree li[data-depth="8"] { --indent: calc(8 * 1.3rem + 8px); }
+.tree li[data-depth="9"] { --indent: calc(9 * 1.3rem + 9px); }
+.tree li[data-depth="10"] { --indent: calc(10 * 1.3rem + 10px); }
 
 .tree li {
     position: relative;

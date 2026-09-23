@@ -1,3 +1,7 @@
+---
+order: 313
+---
+
 # Content collections
 
 Content is data. A collection is a named group of entries, each validated

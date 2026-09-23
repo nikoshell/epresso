@@ -60,6 +60,15 @@ class CSSProcessor:
     def active(self) -> bool:
         return self._detected is not None
 
+    @property
+    def minifies(self) -> bool:
+        """Whether the detected processor already minifies its output.
+
+        The tailwind standalone CLI is invoked with ``--minify``; the postcss path
+        runs the project's plugins, which minify only if the project says so.
+        """
+        return bool(self._detected and self._detected[0] == "tailwind")
+
     def process(self, entry_src: Path, out_dir: Path) -> Path | None:
         """Process ``entry_src`` → an output path under ``out_dir``, or None to fall back."""
         if not self._detected or self._cmd is None:

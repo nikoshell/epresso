@@ -9,6 +9,19 @@ def test_defaults_when_no_file(tmp_path):
     assert cfg.dir_output() == tmp_path / "dist"
 
 
+def test_markdown_backend_defaults_to_native(tmp_path):
+    assert load_config(tmp_path).markdown.backend == "native"
+
+
+def test_markdown_backend_rejects_unknown_value(tmp_path):
+    (tmp_path / "site.toml").write_text("[markdown]\nbackend = 'quickjs'\n")
+    try:
+        load_config(tmp_path)
+        raise AssertionError("expected ConfigError for an unknown backend")
+    except ConfigError:
+        pass
+
+
 def test_load_site_toml(tmp_path):
     (tmp_path / "site.toml").write_text("[site]\nname = 'X'\nurl = 'https://x.io'\n")
     cfg = load_config(tmp_path)
@@ -41,30 +54,19 @@ def test_theme_config_defaults_to_empty(tmp_path):
     assert load_config(tmp_path).theme == {}
 
 
-def test_source_dirs_are_top_level_without_src(tmp_path):
+def test_source_dirs_are_resolved_against_the_project_root(tmp_path):
+    """There is no `src/` layout: a top-level `src/` is an ordinary directory and
+    never relocates pages, components, layouts, content, styles or assets."""
+    (tmp_path / "src").mkdir()
     cfg = load_config(tmp_path)
-    assert cfg.source_root() == tmp_path
     assert cfg.dir_pages() == tmp_path / "pages"
     assert cfg.dir_layouts() == tmp_path / "layouts"
     assert cfg.dir_components() == tmp_path / "components"
     assert cfg.dir_content() == tmp_path / "content"
     assert cfg.dir_styles() == tmp_path / "styles"
     assert cfg.dir_assets() == tmp_path / "assets"
-    # root-anchored regardless
     assert cfg.dir_static() == tmp_path / "public"
     assert cfg.dir_output() == tmp_path / "dist"
-
-
-def test_src_dir_relocates_source_dirs(tmp_path):
-    (tmp_path / "src").mkdir()
-    cfg = load_config(tmp_path)
-    assert cfg.source_root() == tmp_path / "src"
-    assert cfg.dir_pages() == tmp_path / "src" / "pages"
-    assert cfg.dir_layouts() == tmp_path / "src" / "layouts"
-    assert cfg.dir_components() == tmp_path / "src" / "components"
-    assert cfg.dir_content() == tmp_path / "src" / "content"
-    assert cfg.dir_styles() == tmp_path / "src" / "styles"
-    assert cfg.dir_assets() == tmp_path / "src" / "assets"
     # project root stays put: public/, dist/, .cache/ and config files
     assert cfg.dir_static() == tmp_path / "public"
     assert cfg.dir_output() == tmp_path / "dist"

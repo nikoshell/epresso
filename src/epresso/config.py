@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -44,6 +44,11 @@ class BuildConfig(BaseModel):
 
 
 class MarkdownConfig(BaseModel):
+    # Which markdown renderer to use. "native" is the built-in pure-Python
+    # markdown-it-py pipeline. "rust" selects the optional Rust accelerator,
+    # which must be installed separately — selecting it without the extra fails
+    # loudly rather than silently falling back to a different engine.
+    backend: Literal["native", "rust"] = "native"
     extensions: list[str] = Field(default_factory=list)
     toc_heading: str | None = None
     add_slug_ids: bool = True
@@ -231,35 +236,23 @@ class Config(BaseModel):
                 )
         return v
 
-    def source_root(self) -> Path:
-        """Directory that source dirs are resolved against.
-
-        Astro/Nuxt-style: when a top-level ``src/`` directory exists, pages,
-        components, layouts, content, styles and assets live inside
-        it. ``public/`` (``dir_static``), ``dist/`` (``dir_output``), ``.cache/``
-        and project config (``site.toml``, ``content.config.py``) stay at the
-        project root either way.
-        """
-        src = self.root / "src"
-        return src if src.is_dir() else self.root
-
     def dir_content(self) -> Path:
-        return self.source_root() / self.build.content
+        return self.root / self.build.content
 
     def dir_pages(self) -> Path:
-        return self.source_root() / self.build.pages
+        return self.root / self.build.pages
 
     def dir_layouts(self) -> Path:
-        return self.source_root() / self.build.layouts
+        return self.root / self.build.layouts
 
     def dir_components(self) -> Path:
-        return self.source_root() / self.build.components
+        return self.root / self.build.components
 
     def dir_styles(self) -> Path:
-        return self.source_root() / self.build.styles
+        return self.root / self.build.styles
 
     def dir_assets(self) -> Path:
-        return self.source_root() / self.build.assets
+        return self.root / self.build.assets
 
     def dir_static(self) -> Path:
         return self.root / self.build.static

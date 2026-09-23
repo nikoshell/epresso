@@ -78,3 +78,26 @@ def test_code_hash_excludes_markdown_and_changes_on_template_edit(site):
     p.write_text(p.read_text(encoding="utf-8") + "<!-- edit -->\n", encoding="utf-8")
     h2 = site.graph.hash_code(site.config)
     assert h1 != h2
+
+
+def test_layer_hash_covers_components_and_layouts_only(site):
+    """A layer's `.git/` and stray files must not invalidate the build cache.
+
+    Walking the whole layer checkout pulled in `.git/index` (which changes on any
+    git command) and any large stray file, forcing a full re-render.
+    """
+    layer = site.config.root / "vendor" / "ui"
+    (layer / "components").mkdir(parents=True)
+    (layer / "layouts").mkdir(parents=True)
+    (layer / "components" / "Button.ep").write_text("<button/>", encoding="utf-8")
+    (layer / "layouts" / "Shell.ep").write_text("<html/>", encoding="utf-8")
+
+    h1 = site.graph.hash_code(site.config, [layer])
+
+    (layer / ".git").mkdir()
+    (layer / ".git" / "index").write_bytes(b"v1")
+    (layer / "json").write_bytes(b"x" * 4096)
+    assert site.graph.hash_code(site.config, [layer]) == h1
+
+    (layer / "components" / "Button.ep").write_text("<button class='x'/>", encoding="utf-8")
+    assert site.graph.hash_code(site.config, [layer]) != h1

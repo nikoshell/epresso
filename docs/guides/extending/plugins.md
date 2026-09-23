@@ -1,3 +1,7 @@
+---
+order: 342
+---
+
 # Plugins
 
 Plugins extend epresso through a **capability registry**. A plugin is a named,

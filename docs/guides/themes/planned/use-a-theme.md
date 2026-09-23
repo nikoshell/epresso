@@ -1,9 +1,10 @@
 ---
-title: Use a theme as a layer
-order: 10
-draft: true
+order: 371
 description: Reuse a theme without copying it, overriding only the files you choose.
+draft: true
 ---
+
+# Use a theme as a layer
 
 > **Partly available.** Component and layout layers ship today — see
 > [Layers](guides/extending/layers.md). The full theme-as-a-layer mode described
