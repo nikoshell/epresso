@@ -29,16 +29,26 @@ from markupsafe import Markup
 
 from .errors import TemplateError
 
-# Parse + compiled-template cache for .ep components: keyed by
-# (path, mtime, env id) so repeated instances (e.g. one per code block) don't
-# re-read/exec/compile the component. mtime makes it dev-safe.
-# Value shape is `_parse_component`'s return tuple — keep the two in step.
-_COMPONENT_CACHE: dict[
-    tuple[str, float, int],
-    tuple[str, str, str, str, str, CodeType | None, Any, Any | None, Any | None, dict[str, Any] | None],
-] = {}
-# Resolved-component cache: name -> (path, kind), keyed by (name, env id).
-_RESOLVE_CACHE: dict[tuple[str, int], Path | None] = {}
+
+# Per-environment caches. They hold compiled templates and resolved paths that
+# belong to ONE Jinja environment, so they live on the environment itself. A
+# module-level dict keyed by ``id(env)`` returned a dead environment's entry
+# once CPython reused the id after GC — flaky cross-site component resolution
+# (a test's `Base` resolving to another theme's layout).
+def _resolve_cache(env: Any) -> dict[str, Path | None]:
+    cache = getattr(env, "_epresso_resolve_cache", None)
+    if cache is None:
+        cache = {}
+        env._epresso_resolve_cache = cache
+    return cache
+
+
+def _parsed_cache(env: Any) -> dict[tuple[str, float], tuple[Any, ...]]:
+    cache = getattr(env, "_epresso_parsed_cache", None)
+    if cache is None:
+        cache = {}
+        env._epresso_parsed_cache = cache
+    return cache
 
 
 def _scope_hash(name: str) -> str:
@@ -95,14 +105,13 @@ def _current_author() -> str | None:
 
 def _resolve_component(env: Any, name: str) -> Path | None:
     """Cached component resolution (scans are avoided on repeated renders)."""
-    key = (name, id(env))
-    hit = _RESOLVE_CACHE.get(key)
-    if key in _RESOLVE_CACHE:
-        return hit
+    cache = _resolve_cache(env)
+    if name in cache:
+        return cache[name]
     result = _resolve_component_uncached(env, name)
-    if len(_RESOLVE_CACHE) >= 1000:
-        _RESOLVE_CACHE.clear()
-    _RESOLVE_CACHE[key] = result
+    if len(cache) >= 1000:
+        cache.clear()
+    cache[name] = result
     return result
 
 
@@ -473,7 +482,7 @@ def _parse_component(path: Path, environment: Any, site: Any = None):
     frontmatter reads ``site``/``props`` and must therefore run per render.
 
     ``site`` is used only to reach plugin source transforms. Those run before
-    slot expansion, and the cache is keyed on ``id(environment)`` — a fresh
+    slot expansion, and the cache lives on the environment — a fresh
     environment per load, and transforms re-register at ``on_setup`` before any
     render — so a cached entry can never predate a transform's registration.
     """
@@ -481,8 +490,9 @@ def _parse_component(path: Path, environment: Any, site: Any = None):
         mtime = path.stat().st_mtime
     except OSError:
         mtime = 0.0
-    key = (str(path), mtime, id(environment))
-    hit = _COMPONENT_CACHE.get(key)
+    cache = _parsed_cache(environment)
+    key = (str(path), mtime)
+    hit = cache.get(key)
     if hit is not None:
         return hit
     from .document import parse_document
@@ -544,9 +554,9 @@ def _parse_component(path: Path, environment: Any, site: Any = None):
         compiled_global,
         static_ns,
     )
-    if len(_COMPONENT_CACHE) >= 500:
-        _COMPONENT_CACHE.clear()
-    _COMPONENT_CACHE[key] = parsed
+    if len(cache) >= 500:
+        cache.clear()
+    cache[key] = parsed
     return parsed
 
 

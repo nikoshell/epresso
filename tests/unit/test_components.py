@@ -166,3 +166,40 @@ def test_render_independent_frontmatter_is_executed_once(tmp_path):
     site.build()
     html = (site.config.dir_output() / "index.html").read_text()
     assert ">42<" in html and ">2<" in html
+
+
+def test_component_caches_belong_to_the_environment():
+    """The parse/resolve caches must not outlive their Jinja environment.
+
+    They were module-level dicts keyed by ``id(env)``. Once an environment was
+    garbage-collected CPython reused its id, so a new site's ``Base`` could
+    resolve to the *previous* site's layout — a cross-theme leak that surfaced
+    as an intermittent CI failure (a test's minimal layout rendering another
+    theme's full document).
+    """
+    from epresso.components import _parsed_cache, _resolve_cache
+
+    def _site(marker):
+        _, site = _make(
+            {
+                "layouts/Base.ep": (
+                    "<!doctype html><html lang='en'><head><title>{{ props.title }}</title></head>"
+                    f"<body>{marker}<slot /></body></html>"
+                ),
+                "pages/index.md": f"---\nlayout: Base\ntitle: {marker}\n---\n\nbody\n",
+            }
+        )
+        site.build()
+        return site
+
+    site_a = _site("LAYOUTA")
+    env_a = site_a.env
+    # The caches are owned by the environment (so an id cannot outlive it)...
+    assert _resolve_cache(env_a) is _resolve_cache(env_a)
+    assert _parsed_cache(env_a) is _parsed_cache(env_a)
+
+    # ...and a second environment neither shares nor reuses them.
+    site_b = _site("LAYOUTB")
+    assert _resolve_cache(site_b.env) is not _resolve_cache(env_a)
+    html_b = (site_b.config.dir_output() / "index.html").read_text()
+    assert "LAYOUTB" in html_b and "LAYOUTA" not in html_b
