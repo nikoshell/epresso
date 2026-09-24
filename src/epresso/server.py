@@ -73,14 +73,22 @@ class DevServer:
             static = self._static_file(path)
             if static is not None:
                 return static
-            # Generate the search index on demand, but only for its own URL.
+            # Generate the search index on demand, but only for its own URLs:
+            # the manifest and, on multi-section sites, the per-section shard
+            # files write_search_index puts beside it (search-index/<name>.json).
             search_path = "/" + self.site.config.search.index.lstrip("/")
-            if path == search_path:
+            shard_prefix = search_path.rsplit(".", 1)[0] + "/"
+            if path == search_path or (path.startswith(shard_prefix) and path.endswith(".json")):
                 idx = self._dev_search_index()
                 if idx is not None and idx.is_file():
                     from starlette.responses import FileResponse
 
-                    return FileResponse(idx)
+                    if path == search_path:
+                        return FileResponse(idx)
+                    shard_dir = (idx.parent / idx.stem).resolve()
+                    shard = (shard_dir / path[len(shard_prefix):]).resolve()
+                    if shard.is_file() and shard.parent == shard_dir:
+                        return FileResponse(shard)
             not_found = self.site.render_at("/404/") or self.site.render_at("/404.html")
             if not_found:
                 html = self.site.session.inject_page_bundles(

@@ -43,7 +43,7 @@ SRC_TREE=$(git rev-parse "${SRC_REF}^{tree}")
 
 if [ "$CHECK" = 1 ]; then
   echo "== preflight: production docs build =="
-  uv run --project . epresso build themes/docs
+  uv run --project . --extra dev epresso build themes/docs
 fi
 
 echo "== resolving public remote =="
@@ -64,7 +64,7 @@ fi
 
 git tag -a "v$VERSION" "$NEW" -m "$MSG"
 echo "tag: v$VERSION"
-git show --stat --oneline --no-renames "$NEW" | head -20
+git show --stat --oneline --no-renames "$NEW" | head -20 || true  # SIGPIPE must not abort the push
 
 if [ "$PUSH" = 1 ]; then
   # Destination is explicit (refs/heads/main) so pushing a raw commit works even

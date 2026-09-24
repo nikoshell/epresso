@@ -345,6 +345,7 @@ class Site:
         ``path`` is passed through to plugin source transforms for context only;
         the cache key stays the original source so fan-out still hits it.
         """
+        assert self.env is not None, "site not loaded"
         tmpl = self._page_templates.get(source)
         if tmpl is None:
             body = self._apply_source_transforms(source, kind="page", path=path)

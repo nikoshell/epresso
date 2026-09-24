@@ -32,7 +32,11 @@ from .errors import TemplateError
 # Parse + compiled-template cache for .ep components: keyed by
 # (path, mtime, env id) so repeated instances (e.g. one per code block) don't
 # re-read/exec/compile the component. mtime makes it dev-safe.
-_COMPONENT_CACHE: dict[tuple[str, float, int], tuple[str, str, str, str, str, CodeType | None, Any]] = {}
+# Value shape is `_parse_component`'s return tuple — keep the two in step.
+_COMPONENT_CACHE: dict[
+    tuple[str, float, int],
+    tuple[str, str, str, str, str, CodeType | None, Any, Any | None, Any | None, dict[str, Any] | None],
+] = {}
 # Resolved-component cache: name -> (path, kind), keyed by (name, env id).
 _RESOLVE_CACHE: dict[tuple[str, int], Path | None] = {}
 

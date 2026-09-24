@@ -80,3 +80,29 @@ def test_static_dist_serves_generated_404(site, tmp_path):
     assert r.status_code == 404
     assert "sidebar" in r.text
     assert "404 — Not Found" in r.text
+
+
+def test_dev_serves_sharded_search_index(tmp_path):
+    """A multi-section site writes a manifest plus per-section shard files;
+    the dev server must serve the shards, not just the manifest."""
+    from epresso.site import Site
+
+    (tmp_path / "site.toml").write_text("[search]\nenabled = true\n", encoding="utf-8")
+    for rel, body in {
+        "pages/index.md": "---\ntitle: Home\n---\n# Welcome home\n",
+        "pages/guide/index.md": "---\ntitle: Guide\n---\n# Read the guide\n",
+    }.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body, encoding="utf-8")
+    c = TestClient(DevServer(Site.load(tmp_path), port=8000).build_app())
+
+    manifest = c.get("/search-index.json").json()
+    assert manifest["version"] == 3 and len(manifest["sections"]) == 2
+    for sec in manifest["sections"]:
+        r = c.get("/" + sec["file"])
+        assert r.status_code == 200, sec["file"]
+        assert "index" in r.json()
+    # Only real shard files are served; traversal out of the shard dir is not.
+    assert c.get("/search-index/nope.json").status_code == 404
+    assert c.get("/search-index/../site.toml").status_code == 404
