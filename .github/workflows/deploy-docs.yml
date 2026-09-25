@@ -44,6 +44,11 @@ jobs:
         run: uv sync --extra dev
 
       - name: Build docs site
+        env:
+          # Umami website id (public — it ships in the HTML). Set it under
+          # Settings → Secrets and variables → Actions → Variables. Unset =
+          # the plugin no-ops, so preview/dev builds stay untracked.
+          UMAMI_WEBSITE_ID: ${{ vars.UMAMI_WEBSITE_ID }}
         run: uv run --project . epresso build themes/docs
 
       - name: Configure Pages
