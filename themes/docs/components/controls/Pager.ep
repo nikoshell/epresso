@@ -27,7 +27,6 @@ class Props(BaseModel):
     display: flex;
     gap: var(--space-md);
     margin-top: calc(2*var(--space-3xl));
-    margin-bottom: 50vh;
     padding-top: var(--space-xl);
     border-top: 1px solid var(--line);
 }

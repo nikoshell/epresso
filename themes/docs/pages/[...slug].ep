@@ -101,4 +101,5 @@ def get_static_paths():
         <Markdown content={content} />
         <Pager prev={params.prev} next={params.next} />
     </article>
+    <div style="height: 50vh"></div>
 </Doc>

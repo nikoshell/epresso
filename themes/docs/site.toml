@@ -1,4 +1,4 @@
-plugins = ["epresso_pandoc", "epresso_mkdocs_tabs", "epresso_umami"]
+plugins = ["epresso_pandoc", "epresso_mkdocs_tabs", "epresso_umami", "epresso_page_feedback"]
 
 [site]
 name = "epresso"
