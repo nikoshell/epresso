@@ -49,7 +49,10 @@ from .logger import get_logger
 
 # Bundled plugins ship under the repo's ``plugins/`` dir (dev / ``uv run``); make
 # them importable by dotted name so e.g. ``[plugins] = ["epresso_pandoc"]`` works.
+# Repo checkout: <repo>/plugins; installed wheel: epresso/_plugins.
 _BUNDLED_PLUGINS = Path(__file__).resolve().parents[2] / "plugins"
+if not _BUNDLED_PLUGINS.is_dir():
+    _BUNDLED_PLUGINS = Path(__file__).resolve().parent / "_plugins"
 if _BUNDLED_PLUGINS.is_dir() and str(_BUNDLED_PLUGINS) not in sys.path:
     sys.path.insert(0, str(_BUNDLED_PLUGINS))
 

@@ -23,8 +23,16 @@ from pathlib import Path
 # Themes that ship in this repository live under ``themes/``. Other names are
 # resolved from a sibling checkout (dev) or a published git URL.
 _REPO = Path(__file__).resolve().parents[2]
+
+
+def bundled_docs_theme() -> Path:
+    """The docs theme: repo checkout copy, else the one shipped in the wheel."""
+    repo = _REPO / "themes" / "docs"
+    return repo if repo.is_dir() else Path(__file__).resolve().parent / "_themes" / "docs"
+
+
 REGISTRY: dict[str, tuple[str, str]] = {
-    "docs": (str(_REPO / "themes" / "docs"), "main"),
+    "docs": (str(bundled_docs_theme()), "main"),
     "blog": (str(Path(__file__).resolve().parents[3] / "epresso-theme-blog"), "main"),
 }
 

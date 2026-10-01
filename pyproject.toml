@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.5.5"
+version = "0.5.6"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -44,6 +44,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/epresso"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"themes/docs/components" = "epresso/_themes/docs/components"
+"themes/docs/layouts" = "epresso/_themes/docs/layouts"
+"themes/docs/pages" = "epresso/_themes/docs/pages"
+"themes/docs/public" = "epresso/_themes/docs/public"
+"themes/docs/styles" = "epresso/_themes/docs/styles"
+"themes/docs/content.config.py" = "epresso/_themes/docs/content.config.py"
+"themes/docs/site.toml" = "epresso/_themes/docs/site.toml"
+"themes/docs/site.development.toml" = "epresso/_themes/docs/site.development.toml"
+"themes/docs/site.preview.toml" = "epresso/_themes/docs/site.preview.toml"
+"plugins/epresso_mkdocs_tabs.py" = "epresso/_plugins/epresso_mkdocs_tabs.py"
+"plugins/epresso_page_feedback.py" = "epresso/_plugins/epresso_page_feedback.py"
+"plugins/epresso_pandoc.py" = "epresso/_plugins/epresso_pandoc.py"
+"plugins/epresso_umami.py" = "epresso/_plugins/epresso_umami.py"
 
 [tool.hatch.build.targets.sdist]
 include = ["src/epresso"]

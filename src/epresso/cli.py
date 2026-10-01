@@ -10,6 +10,7 @@ from typing import Any
 import typer
 
 from . import __version__, themes
+from .themes import bundled_docs_theme
 from .deploy import PROVIDERS
 from .errors import EpressoError
 from .logger import get_logger
@@ -321,7 +322,7 @@ def _build_docs_sections(site: Site) -> None:
                 theme = (
                     Path(sec.theme)
                     if sec.theme
-                    else Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
+                    else bundled_docs_theme()
                 )
                 tmp = Path(auto_docs_project(src, DEFAULT_PORT, theme))
                 child = Site.load(tmp, env=site.config.env, load=False)
@@ -450,7 +451,7 @@ def docs(
     from .docsgen import auto_docs_project, materialize_docs_source  # noqa: PLC0415
 
     _start = time.monotonic()
-    bundled = Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
+    bundled = bundled_docs_theme()
     if root is None:
         doc_root = bundled
     else:

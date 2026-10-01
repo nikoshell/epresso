@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .themes import bundled_docs_theme
 from .errors import EpressoError
 from .gitrepo import default_branch as repo_default_branch  # noqa: F401  (re-export)
 from .gitrepo import normalize_repo_url  # noqa: F401  (re-export)
@@ -248,7 +249,7 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     collection content, so it renders fully with the docs theme.
     """
     if theme is None:
-        theme = Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
+        theme = bundled_docs_theme()
     theme = theme.resolve()
     tmp = Path(tempfile.mkdtemp(prefix="epresso-docs-"))
     for item in theme.iterdir():
