@@ -16,11 +16,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .themes import bundled_docs_theme
 from .errors import EpressoError
 from .gitrepo import default_branch as repo_default_branch  # noqa: F401  (re-export)
 from .gitrepo import normalize_repo_url  # noqa: F401  (re-export)
 from .gitrepo import origin_url as repo_origin
+from .themes import bundled_docs_theme
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "dist", ".next"}
 

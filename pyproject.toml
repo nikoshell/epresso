@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.5.6"
+version = "0.5.7"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -61,7 +61,8 @@ packages = ["src/epresso"]
 "plugins/epresso_umami.py" = "epresso/_plugins/epresso_umami.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/epresso"]
+include = ["src/epresso", "plugins/*.py", "themes/docs"]
+exclude = ["themes/docs/dist", "themes/docs/.cache", "__pycache__"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

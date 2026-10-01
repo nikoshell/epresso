@@ -10,12 +10,12 @@ from typing import Any
 import typer
 
 from . import __version__, themes
-from .themes import bundled_docs_theme
 from .deploy import PROVIDERS
 from .errors import EpressoError
 from .logger import get_logger
 from .server import DEFAULT_PORT
 from .site import Site
+from .themes import bundled_docs_theme
 
 app = typer.Typer(help="epresso — a modern, Python-first static site generator.", no_args_is_help=True)
 log = get_logger("cli")
