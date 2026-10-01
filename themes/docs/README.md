@@ -15,6 +15,16 @@ Preview a repo's docs:
 uv run --project . epresso docs --theme themes/docs <path/to/repo>
 ```
 
+Write them to a directory instead of serving (add `--out`):
+
+```bash
+uv run --project . epresso docs --theme themes/docs <path/to/repo> --out dist/docs
+```
+
+When `<path/to/repo>` is a git checkout, the rendered pages link back to that
+repository (its `origin` and default branch become `[site] repository` /
+`branch`). See [Preview a repository's docs](/guides/themes/preview-repo-docs/).
+
 Build or serve this repo's own docs (the project's `docs/`):
 
 ```bash

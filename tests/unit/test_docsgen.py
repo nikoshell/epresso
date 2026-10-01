@@ -9,9 +9,11 @@ import pytest
 from epresso.docsgen import (
     auto_docs_project,
     is_repo_dir,
+    materialize_docs_source,
     normalize_repo_url,
     patch_site_toml,
     repo_default_branch,
+    repo_origin,
 )
 
 
@@ -80,3 +82,64 @@ def test_repo_default_branch_uses_origin_head(tmp_path):
     _git(repo, "symbolic-ref", "HEAD", "refs/heads/other")
     _git(repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
     assert repo_default_branch(repo) == "main"
+
+
+def _commit(root: Path, msg: str = "init") -> None:
+    _git(root, "add", "-A")
+    _git(root, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", msg)
+
+
+def _make_repo(root: Path, files: dict[str, str], branch: str = "main") -> Path:
+    root.mkdir(parents=True)
+    for rel, content in files.items():
+        _write(root, rel, content)
+    _git(root, "init", "-q", "-b", branch)
+    _commit(root)
+    return root
+
+
+def test_materialize_docs_source_returns_existing_directory(tmp_path):
+    src = tmp_path / "docs-src"
+    src.mkdir()
+    assert materialize_docs_source(str(src), tmp_path / "cache") == src.resolve()
+
+
+def test_materialize_docs_source_unknown_spec_is_none(tmp_path):
+    assert materialize_docs_source("not-a-repo-and-not-a-path", tmp_path / "cache") is None
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_materialize_docs_source_clones_a_git_url_and_caches_it(tmp_path):
+    repo = _make_repo(tmp_path / "repo", {"docs/index.md": "# Hi\n", "README.md": "# Repo\n"})
+    cache = tmp_path / "cache"
+    clone = materialize_docs_source(f"file://{repo}", cache)
+    assert clone is not None and clone.is_dir()
+    # .git is kept so patch_site_toml can read origin/branch for the repo link
+    assert (clone / ".git").exists()
+    assert repo_origin(clone).startswith("file://")
+    assert (clone / "docs" / "index.md").is_file()
+    # a second call reuses the cached clone rather than re-fetching
+    sentinel = clone / "SENTINEL"
+    sentinel.write_text("x", encoding="utf-8")
+    assert materialize_docs_source(f"file://{repo}", cache) == clone
+    assert sentinel.exists()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_materialize_docs_source_pins_a_ref(tmp_path):
+    repo = _make_repo(tmp_path / "repo", {"docs/index.md": "# main\n"})
+    _git(repo, "checkout", "-q", "-b", "v1")
+    _write(repo, "docs/extra.md", "# v1 only\n")
+    _commit(repo, "v1")
+    clone = materialize_docs_source(f"file://{repo}@v1", tmp_path / "cache")
+    assert clone is not None
+    assert (clone / "docs" / "extra.md").is_file()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_materialize_docs_source_rejects_a_bad_ref(tmp_path):
+    from epresso.errors import EpressoError
+
+    repo = _make_repo(tmp_path / "repo", {"docs/index.md": "# Hi\n"})
+    with pytest.raises(EpressoError, match="could not fetch docs"):
+        materialize_docs_source(f"file://{repo}@no-such-ref", tmp_path / "cache")

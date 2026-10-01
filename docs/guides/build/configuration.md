@@ -136,7 +136,7 @@ accessors on the loaded config: `dir_content()`, `dir_pages()`,
 All of these are resolved against the project root, as are `site.toml` and
 `content.config.py`. Content collection `base` paths are resolved against the
 same root. See
-[Project structure](../basics/project-structure.md).
+[Project structure](/basics/project-structure/).
 
 External component/layout roots come from `[layers] use` — see
 [Layers](guides/extending/layers.md).

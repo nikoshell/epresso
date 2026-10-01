@@ -31,7 +31,7 @@ service — the data is fetched once and baked into the static site.
 ## Environment-aware
 
 Loaders/plugins see environment variables via `os.environ` and the per-env
-dotenv files — see [Environment variables](../build/environment-variables.md.
+dotenv files — see [Environment variables](/guides/build/environment-variables/).
 
 ## See also
 

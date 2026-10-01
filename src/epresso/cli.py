@@ -436,7 +436,9 @@ def preview(
 
 @app.command()
 def docs(
-    root: Path = typer.Argument(None, help="Docs project directory (default: the bundled docs example)"),
+    root: str | None = typer.Argument(
+        None, help="Docs project directory, or a git source (github:owner/repo\\[@ref], https://…)"
+    ),
     host: str = typer.Option("127.0.0.1"),
     port: int = typer.Option(DEFAULT_PORT, help="Port to serve the docs on"),
     theme: Path | None = typer.Option(None, help="Theme project for bare Markdown (default: the bundled docs theme)"),
@@ -445,22 +447,37 @@ def docs(
     out: Path | None = typer.Option(None, "--out", help="Write a static production build to this directory instead of serving"),
 ) -> None:
     """Build the documentation; serve it (default port 4321) or write it with --out."""
-    from .docsgen import auto_docs_project  # noqa: PLC0415  (lazy import)
+    from .docsgen import auto_docs_project, materialize_docs_source  # noqa: PLC0415
 
     _start = time.monotonic()
+    bundled = Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
     if root is None:
-        root = Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
-    root = root.resolve()
-    if not (root / "site.toml").exists():
-        if root.is_dir():
+        doc_root = bundled
+    else:
+        try:
+            doc_root = materialize_docs_source(root, Path.cwd() / ".cache" / "repos")
+        except EpressoError as e:
+            typer.secho(str(e), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from e
+        if doc_root is None:
+            typer.secho(
+                f"no docs project at {root!r} (pass a directory, a git source like "
+                "`github:owner/repo[@ref]`, or e.g. `epresso docs ./themes/docs`)",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(1)
+    doc_root = doc_root.resolve()
+    if not (doc_root / "site.toml").exists():
+        if doc_root.is_dir():
             # Bare Markdown directory → render with the docs theme (bundled by default).
             if theme is None:
-                theme = Path(__file__).resolve().parent.parent.parent / "themes" / "docs"
-            _status(perf, _start, f"📖 Rendering docs from {root} with theme {theme}…")
-            root = auto_docs_project(root, port, theme)
+                theme = bundled
+            _status(perf, _start, f"📖 Rendering docs from {doc_root} with theme {theme}…")
+            doc_root = auto_docs_project(doc_root, port, theme)
         else:
             typer.secho(
-                f"no docs project at {root} (pass a root, e.g. `epresso docs ./themes/docs`)",
+                f"no docs project at {doc_root} (pass a root, e.g. `epresso docs ./themes/docs`)",
                 fg=typer.colors.RED,
                 err=True,
             )
@@ -468,7 +485,7 @@ def docs(
     from .server import find_free_port, serve_dist
 
     try:
-        site = Site.load(root, env=_resolve_env(env, "production"), load=False)
+        site = Site.load(doc_root, env=_resolve_env(env, "production"), load=False)
         result = site.build(progress=_make_progress())
         _end_progress()
     except EpressoError as e:

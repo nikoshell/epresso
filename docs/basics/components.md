@@ -176,7 +176,7 @@ A `<style>` block in a `.ep` file is extracted, scoped to the component's output
 ```
 
 Scoped CSS is written to `dist/_scoped/epresso-<hash>.css`. `:global(...)` rules are
-stripped to their inner selector, which stays global (unscoped). See [Styling and CSS](../guides/styling/styling.md.
+stripped to their inner selector, which stays global (unscoped). See [Styling and CSS](/guides/styling/styling/).
 
 ## Template syntax
 

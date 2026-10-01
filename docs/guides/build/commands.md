@@ -28,7 +28,11 @@ full rebuild; `--env <name>` selects a per-environment config.
 ```bash
 epresso preview   # build, then serve dist/ statically
 epresso docs      # build + serve the documentation on port 4321
+epresso serve     # serve an already-built dist/ (no build)
 ```
+
+To render another repository's Markdown as a docs site, see
+[Preview a repository's docs](/guides/themes/preview-repo-docs/).
 
 ## Check
 
@@ -47,4 +51,4 @@ epresso clean     # remove dist/ and the .cache build cache
 ## Deterministic + incremental
 
 Builds are deterministic (same input → same output) and incremental (edits
-re-render only affected pages) — see [Incremental builds & caching](../guides/build/incremental.md.
+re-render only affected pages) — see [Incremental builds & caching](/guides/build/incremental/).

@@ -1,5 +1,9 @@
 """CLI tests via Typer's CliRunner (root passed explicitly via tmp_path)."""
 
+import shutil
+import subprocess
+
+import pytest
 from typer.testing import CliRunner
 
 from epresso.cli import app
@@ -35,6 +39,28 @@ def test_docs_missing_root_errors(tmp_path):
     result = runner.invoke(app, ["docs", str(tmp_path / "nope")])
     assert result.exit_code == 1
     assert "no docs project" in result.output.lower()
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
+def test_docs_accepts_a_git_source(tmp_path, monkeypatch):
+    """`epresso docs <git-url>` clones and renders, without a local checkout."""
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "index.md").write_text("# Repo docs\n\nHello.\n", encoding="utf-8")
+    git = ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t"]
+    subprocess.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True, capture_output=True)
+    subprocess.run([*git, "add", "-A"], check=True, capture_output=True)
+    subprocess.run([*git, "commit", "-qm", "init"], check=True, capture_output=True)
+
+    monkeypatch.chdir(tmp_path)  # the clone cache lands in tmp_path/.cache
+    out = tmp_path / "out"
+    result = runner.invoke(app, ["docs", f"file://{repo}", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert (out / "index.html").is_file()
+    assert "Repo docs" in (out / "index.html").read_text(encoding="utf-8")
+    # the clone is cached (and keeps .git for the repository link)
+    cached = list((tmp_path / ".cache" / "repos").iterdir())
+    assert len(cached) == 1 and (cached[0] / ".git").exists()
 
 
 def test_check_reports_routes(tmp_path):

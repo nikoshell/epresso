@@ -446,12 +446,15 @@ Themes are git-cloned (or copied) from their own repos and given to you as a sta
 | `epresso dev` | Development server with live reload |
 | `epresso build` | Deterministic + incremental production build |
 | `epresso preview` | Build then serve `dist/` (production preview) |
-| `epresso docs` | Build + serve the documentation (port 4321) |
+| `epresso docs` | Build + serve a project's documentation (port 4321), or write it with `--out` |
+| `epresso serve` | Serve an already-built `dist/` (no build) |
 | `epresso clean` | Remove `dist/` and the build cache |
 | `epresso layers` | List the component/layout layers resolved from `[layers] use` |
 | `epresso check` | Validate config + content, list routes |
 | `epresso fmt` | Format `.ep` files to the canonical section structure |
 | `epresso lsp` | Run the `.ep` Language Server (diagnostics + formatting) over stdio |
+| `epresso inspect` | Inspect the build graph (routes + content → route edges) |
+| `epresso deploy` | Build and deploy (GitHub Pages by default) |
 | `epresso version` | Print the version |
 
 ## Development

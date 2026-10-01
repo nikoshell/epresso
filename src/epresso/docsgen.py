@@ -8,17 +8,87 @@ it lives here behind a small interface instead of inside ``cli.py``.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
+from .errors import EpressoError
 from .gitrepo import default_branch as repo_default_branch  # noqa: F401  (re-export)
 from .gitrepo import normalize_repo_url  # noqa: F401  (re-export)
 from .gitrepo import origin_url as repo_origin
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "dist", ".next"}
+
+
+def materialize_docs_source(spec: str, cache_root: Path) -> Path | None:
+    """Resolve a ``docs`` source spec to a local directory, cloning on demand.
+
+    ``spec`` is either an existing directory or a git source in the forms
+    ``epresso new`` accepts — ``github:owner/repo[@ref]``, ``git+https://…``,
+    a plain ``https://`` / ``git@`` URL — with an optional ``@ref``.
+
+    A repo is shallow-cloned into ``cache_root/<slug>`` and reused on later runs
+    (delete the cache dir to re-fetch a moved ref). ``.git`` is deliberately
+    kept: :func:`patch_site_toml` reads the clone's ``origin`` and default branch
+    to link the generated pages back to the repository.
+
+    Returns ``None`` when ``spec`` is neither an existing directory nor a
+    recognised git source; raises :class:`EpressoError` when a fetch fails.
+    """
+    from .themes import parse_source  # local import: docsgen stays import-light
+
+    parsed = parse_source(spec)
+    if parsed is None:
+        return None
+    repo, ref = parsed
+    local = Path(repo).expanduser()
+    if local.is_dir():
+        return local.resolve()
+    dest = cache_root / _repo_slug(repo, ref)
+    if (dest / ".git").exists():
+        return dest
+    return _clone_repo(repo, ref, dest)
+
+
+def _repo_slug(url: str, ref: str | None) -> str:
+    """A filesystem-safe, ref-pinned cache key for a cloned repo."""
+    base = re.sub(r"^[a-zA-Z]+://", "", url).removesuffix(".git")
+    name = re.sub(r"[^A-Za-z0-9._-]+", "__", base)[-60:]
+    wanted = ref or "HEAD"
+    digest = hashlib.sha256(f"{url}@{wanted}".encode()).hexdigest()[:8]
+    return f"{name}@{re.sub(r'[^A-Za-z0-9._-]+', '_', wanted)}-{digest}"
+
+
+def _clone_repo(url: str, ref: str | None, dest: Path) -> Path:
+    """Shallow-clone ``url``@``ref`` into ``dest``, keeping ``.git``."""
+    git = shutil.which("git")
+    if not git:
+        raise EpressoError(
+            f"cannot fetch docs from {url!r}: git is not installed",
+            fix="install git, or clone the repo yourself and pass the directory",
+        )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    staging = dest.with_name(dest.name + ".tmp")
+    shutil.rmtree(staging, ignore_errors=True)
+    cmd = [git, "clone", "--depth=1", "--quiet"]
+    if ref:
+        cmd += ["--branch", ref]
+    cmd += [url, str(staging)]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise EpressoError(
+            f"could not fetch docs from {url}@{ref or 'HEAD'}: {(e.stderr or '').strip() or e}",
+            fix="check the URL and ref (github:owner/repo[@ref])",
+        ) from e
+    shutil.rmtree(dest, ignore_errors=True)
+    staging.rename(dest)
+    return dest
 
 
 def is_repo_dir(source: Path) -> bool:

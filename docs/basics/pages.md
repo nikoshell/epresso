@@ -36,4 +36,4 @@ for a static endpoint. See [Routing](routing.md and [The `.ep` file format](comp
 ## Private files
 
 Files and directories whose name starts with `_` (e.g. `_draft.ep`, `_partials/`)
-are treated as private and **excluded from builds** — see [Content collections](../guides/content/content-collections.md.
+are treated as private and **excluded from builds** — see [Content collections](/guides/content/content-collections/).

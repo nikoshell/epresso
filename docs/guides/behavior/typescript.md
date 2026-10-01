@@ -19,4 +19,4 @@ type hints plus Pydantic.
 ## Editor setup
 
 Any Python-capable editor works. For `.ep` files, syntax highlighting comes from
-the surrounding Markup + Python; see [Editor setup](../editor-setup).
+the surrounding Markup + Python; see [Editor setup](/guides/editor-setup/).

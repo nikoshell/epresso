@@ -73,6 +73,13 @@ docs = list(site.get_collection("docs"))
     padding-inline: clamp(var(--space-lg), 4vw, var(--space-xl));
 }
 
+/* Space at the end of a doc page — room to scroll the last heading up under
+   the sticky header/ToC. Global because the pad is authored by the page
+   (pages/[...slug].ep), not by this layout. */
+:global(.doc-end-pad) {
+    height: 50vh;
+}
+
 .doc h1 {
     margin-bottom: var(--space-sm);
 }
