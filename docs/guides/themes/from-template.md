@@ -67,14 +67,14 @@ mysite/
   site.toml
   content.config.py
   pages/                      # routes, including dynamic ones
-  layouts/                    # Base.ep, Doc.ep — the page shells
+  layouts/                    # DocsBase.ep, DocsPage.ep — the page shells
   components/
-    primitives/               # Icon, IconButton
-    controls/                 # Pager, SearchButton, ThemeToggle
-    navigation/               # Breadcrumbs, NavAccordion, Toc
-    patterns/                 # Markdown, Highlight, CodeHead, SearchOverlay
-    structure/                # Header, Footer
-  styles/                     # global stylesheet + design tokens
+    primitives/               # DocsIcon, DocsIconButton
+    controls/                 # DocsPager, DocsSearchButton, …
+    navigation/               # DocsBreadcrumbs, DocsNavAccordion, DocsToc
+    patterns/                 # DocsMarkdown, DocsHighlight, DocsCodeHead, …
+    structure/                # DocsHeader, DocsFooter
+  styles/                     # docs.css: design tokens + base styles
   public/                     # favicon, etc.
 ```
 
@@ -90,8 +90,8 @@ epresso preview
 You are editing a copy, so change anything:
 
 1. **Identify it** — `site.toml`: `[site] name`, `url`, `repository`, `branch`.
-2. **Adjust the shell** — `layouts/Base.ep` (the whole document) and
-   `layouts/Doc.ep` (the documentation page frame).
+2. **Adjust the shell** — `layouts/DocsBase.ep` (the whole document) and
+   `layouts/DocsPage.ep` (the documentation page frame).
 3. **Restyle** — `styles/` holds the tokens and global CSS. `[assets] css`
    names the entry point.
 4. **Delete what you don't need** — demo pages under `pages/`, unused

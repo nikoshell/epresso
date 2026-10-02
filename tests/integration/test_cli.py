@@ -63,6 +63,27 @@ def test_docs_accepts_a_git_source(tmp_path, monkeypatch):
     assert len(cached) == 1 and (cached[0] / ".git").exists()
 
 
+def test_docs_toml_merges_sources(tmp_path, monkeypatch):
+    """`epresso docs` in a dir with docs.toml builds every source into one site."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "index.md").write_text("# Main\n\nhi\n", encoding="utf-8")
+    (tmp_path / "extra").mkdir()
+    (tmp_path / "extra" / "usage.md").write_text("# Extra usage\n\nx\n", encoding="utf-8")
+    (tmp_path / "docs.toml").write_text(
+        'title = "My Project"\n'
+        '[[sources]]\nsource = "docs"\n'
+        '[[sources]]\nsource = "extra"\nprefix = "/extra/"\ntitle = "Extra"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "out"
+    result = runner.invoke(app, ["docs", "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    assert "Main" in (out / "index.html").read_text(encoding="utf-8")
+    page = (out / "extra" / "usage" / "index.html").read_text(encoding="utf-8")
+    assert "Extra usage" in page and "My Project" in page
+
+
 def test_check_reports_routes(tmp_path):
     r = tmp_path / "site"
     runner.invoke(app, ["init", str(r)])

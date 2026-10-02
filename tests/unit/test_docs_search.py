@@ -9,7 +9,7 @@ _SRC = (
     / "docs"
     / "components"
     / "patterns"
-    / "SearchOverlay.ep"
+    / "DocsSearchOverlay.ep"
 ).read_text(encoding="utf-8")
 
 

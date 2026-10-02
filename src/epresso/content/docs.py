@@ -14,9 +14,11 @@ collection's ``loader``. On-page headings come from the render
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..document import parse_document
+from ..errors import ContentError
 from ..markdown import first_heading, strip_first_h1
 from .loaders import LoaderObject
 from .store import Collection, ContentStore, Entry, content_digest
@@ -101,6 +103,7 @@ def _read_docs(base: Path, pattern: str, docs_dir: str) -> dict[str, dict]:
             # reads ``docs/basics/components.md`` — regardless of whether the docs
             # are read from the project root or a copied base (preview).
             "source": f"{docs_dir}/{rel.as_posix()}" if docs_dir else str(rel),
+            "rel": rel.as_posix(),
             "group_path": parts,
             "is_hub": is_hub,
             "has_page": has_page,
@@ -179,6 +182,60 @@ def _order(docs: dict[str, dict]) -> list[dict]:
     return [docs[i] for i in ordered]
 
 
+@dataclass(frozen=True)
+class DocsMount:
+    """One docs source: a Markdown dir published under a URL ``prefix``.
+
+    ``title`` labels the source's sidebar group (non-root prefixes only);
+    ``repo_url`` is the "view source" base, e.g.
+    ``https://github.com/o/r/blob/v1/docs`` — each page appends its relative path.
+    """
+
+    base: Path
+    prefix: str = "/"
+    title: str = ""
+    repo_url: str = ""
+    docs_dir: str = "docs"
+    asset_url: str = ""  # URL where the mount's non-Markdown files are published
+
+
+def _prefix_parts(prefix: str) -> list[str]:
+    return [p for p in prefix.strip("/").split("/") if p]
+
+
+def _read_mounts(mounts: list[DocsMount], pattern: str) -> dict[str, dict]:
+    """Read every mount into one id space. Duplicate ids are an error; a
+    non-root mount without an index gets a label-only section hub."""
+    docs: dict[str, dict] = {}
+    for m in mounts:
+        if not m.base.exists():
+            continue
+        pre = _prefix_parts(m.prefix)
+        for d in _read_docs(m.base, pattern, m.docs_dir).values():
+            d["id"] = "/".join([*pre, d["id"]]) if d["id"] else "/".join(pre)
+            d["group_path"] = [*pre, *d["group_path"]]
+            d["source_url"] = f"{m.repo_url.rstrip('/')}/{d['rel']}" if m.repo_url else ""
+            d["mount_title"] = m.title
+            if m.asset_url:
+                rel_dir = d["rel"].rpartition("/")[0]
+                d["image_base"] = m.asset_url.rstrip("/") + "/" + (rel_dir + "/" if rel_dir else "")
+            if d["id"] in docs:
+                raise ContentError(
+                    f"duplicate docs page {d['id'] or '/'!r}: {docs[d['id']]['file']} and {d['file']}"
+                    " (give one source a different `prefix`)"
+                )
+            docs[d["id"]] = d
+        hub = "/".join(pre)
+        if pre and hub not in docs:
+            docs[hub] = {
+                "id": hub, "file": None, "title": m.title or pre[-1].replace("-", " ").title(),
+                "description": "", "draft": False, "private": False, "order": DEFAULT_ORDER,
+                "source": "", "rel": "", "source_url": "", "mount_title": m.title,
+                "group_path": pre, "is_hub": True, "has_page": False, "body": "",
+            }
+    return docs
+
+
 class DocsLoader(LoaderObject):
     """Load markdown files into a docs collection.
 
@@ -186,16 +243,35 @@ class DocsLoader(LoaderObject):
     collection schema) and the derived docs-nav model in ``computed``.
     """
 
-    def __init__(self, base: Path, pattern: str, docs_dir: str = "docs"):
-        self.base = base
+    def __init__(
+        self,
+        base: Path | None = None,
+        pattern: str = "**/*.{md,markdown}",
+        docs_dir: str = "docs",
+        *,
+        mounts: list[DocsMount] | None = None,
+    ):
+        """Read ``base`` (one source at ``/``), or several ``mounts``."""
+        if mounts is None:
+            if base is None:
+                raise TypeError("DocsLoader needs a base dir or mounts")
+            mounts = [DocsMount(base=base, docs_dir=docs_dir)]
+        self.mounts = mounts
         self.pattern = pattern
-        self.docs_dir = docs_dir
+
+    @property
+    def base(self) -> Path:
+        """The first mount's dir (single-source callers)."""
+        return self.mounts[0].base
 
     def load(self, store: ContentStore, collection: Collection) -> None:
-        if not self.base.exists():
+        docs = _read_mounts(self.mounts, self.pattern)
+        if not docs:
             return
-        docs = _read_docs(self.base, self.pattern, self.docs_dir)
         ordered = _order(docs)
+        for d in ordered:  # a titled non-root source names its own sidebar group
+            if d["mount_title"] and d["group_path"]:
+                d["group"] = d["mount_title"]
         chain = [d for d in ordered if d["id"] != "" and d.get("has_page", True)]
         n = len(chain)
         index = {d["id"]: i for i, d in enumerate(chain)}
@@ -219,6 +295,8 @@ class DocsLoader(LoaderObject):
                 "has_page": doc.get("has_page", True),
                 "order": doc["order"],
                 "source": doc["source"],
+                "source_url": doc["source_url"],
+                "image_base": doc.get("image_base", ""),
                 "prev": {"url": f"/{prev['id']}/", "title": prev["title"]} if prev else None,
                 "next": {"url": f"/{nxt['id']}/", "title": nxt["title"]} if nxt else None,
             }

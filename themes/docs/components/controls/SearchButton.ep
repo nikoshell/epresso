@@ -1,6 +1,0 @@
----
----
-
-<IconButton id="search-open" aria_label="Search" aria_haspopup="dialog">
-    <Icon icon="search" />
-</IconButton>

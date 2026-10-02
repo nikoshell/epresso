@@ -41,7 +41,13 @@ All theme options live in `[theme]` in `site.toml`. Each is overridable with an
 |-------------|---------------------|---------|------------------------------------------------|
 | `repo_name` | `EPRESSO_REPO_NAME`  | `""`    | URL prefix + sidebar/breadcrumb root (empty = served from the root) |
 | `docs_dir`  | `EPRESSO_DOCS_DIR`   | `docs`  | which subdir of the source repo holds the docs (e.g. `docs`, `_posts`) |
-| `docs_base` | `EPRESSO_DOCS_BASE`  | `""`    | extra URL prefix (e.g. `/docs/` on GitHub Pages) |
+| `docs_base` | —                   | `""`    | read the docs from this directory instead (set by `epresso docs`) |
+| `repo`      | —                   | `""`    | the repo this theme documents when built from its own dir (e.g. `../..`) |
+
+These only apply when `[[plugin.epresso_docs.sources]]` is not set. For several
+sources, or docs under a path inside another site (`base = "/docs/"`), configure
+the `epresso_docs` plugin — see the plugins guide.
+| `logo` / `favicon` / `og_image` | — | `""` | branding paths under the output root; default: `logo.svg` / `favicon.ico` / `og-image.png` next to the docs, else the site name as text |
 | `page_actions` | — | `true` | copy-page button + markdown menu, and the per-page `<page>.md` routes they use (set `false` to drop both) |
 | `nav_collapse_after` | — | `40` | fold the top-level sidebar sections once the nav has more rows than this (directories + pages); the section holding the current page stays open |
 
@@ -124,25 +130,24 @@ A site with a single top-level section keeps the one-file index.
 ## Layout
 
 ```
-site.toml            # config: [theme], [build] component/layout roots
-content.config.py    # defines the docs collection (schema + loader)
+site.toml            # config: [theme], plugins (epresso_docs owns the docs collection)
 pages/
   [...slug].ep       # one dynamic route → a page per doc
   404.ep
-layouts/             # document shells (Base, Doc)
+layouts/             # document shells (DocsBase, DocsPage)
 components/          # UI components (each owns scoped <style>/<script>)
   primitives/  controls/  patterns/  navigation/  structure/
-styles/global.css    # design tokens, fonts, and page base
-public/              # fonts, images, favicon, toolbar assets
+styles/docs.css      # design tokens, fonts, and page base
+public/docs-theme/   # the theme's fonts (no logo or favicon: the theme is brand-neutral)
 ```
 
 ## What's where
 
-- `layouts/Base.ep` — the document shell (`<html>`, head, header, footer)
-- `layouts/Doc.ep` — the docs page (sidebar + content + ToC rail)
-- `components/navigation/` — `Nav` (sidebar), `Breadcrumbs`, `Toc`
-- `components/patterns/` — `Markdown` (prose), `Highlight` (code blocks), `CodeHead`, `SearchOverlay`, `ShortcutsOverlay`, `ImageLightbox`
-- `components/controls/` — `SearchButton`, `PageActions`, `Pager`
+- `layouts/DocsBase.ep` — the document shell (`<html>`, head, header, footer)
+- `layouts/DocsPage.ep` — the docs page (sidebar + content + ToC rail)
+- `components/navigation/` — `DocsNavAccordion` (sidebar), `DocsBreadcrumbs`, `DocsToc`
+- `components/patterns/` — `DocsMarkdown` (prose), `DocsHighlight` (code blocks), `DocsCodeHead`, `DocsSearchOverlay`, `DocsShortcutsOverlay`, `DocsImageLightbox`
+- `components/controls/` — `DocsSearchButton`, `DocsPageActions`, `DocsPager`
 
 ## Deploying to GitHub Pages
 
@@ -150,7 +155,7 @@ A ready-made workflow is included in the repo (`.github/workflows/deploy-docs.ym
 on every push to `main` it builds the docs site and deploys `dist/` to GitHub
 Pages. The theme emits root-relative URLs, which work on a User/Organization
 Pages site or a custom domain; on a project Pages site you'll need a custom
-domain or `[theme] docs_base` set.
+domain or `[build] base` (or `EPRESSO_BASE`) set.
 
 ## License
 

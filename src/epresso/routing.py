@@ -261,6 +261,18 @@ def discover_route_patterns(pages_dir: Path) -> list[RoutePattern]:
     return patterns
 
 
+def plugin_route_pattern(rel: str, file: Path) -> RoutePattern:
+    """A route a plugin adds (``caps.add_route``): ``rel`` is where it would sit
+    under ``pages/`` (e.g. ``docs/[...slug].ep``), ``file`` the template on disk."""
+    kinds = {".ep": "epresso", ".md": "direct_md", ".py": "endpoint"}
+    relp = Path(rel)
+    kind = kinds.get(relp.suffix.lower())
+    if kind is None:
+        raise RouteError(f"plugin route {rel!r}: expected a .ep, .md or .py path", path=str(file))
+    segments, params = parse_route(relp)
+    return RoutePattern(Path(file).resolve(), relp, segments, params, kind)
+
+
 def _load_module(path: Path, globals_extra: dict[str, Any] | None = None) -> Any:
     name = "_epresso_route_" + "_".join(p for p in path.parts if p not in {".", ".."})
     name = (

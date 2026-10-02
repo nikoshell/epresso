@@ -11,7 +11,7 @@ class Props(BaseModel):
     <nav class="toc toc--inline" aria-label="On this page">
         <details>
             <summary class="toc-trigger">
-                <Icon icon="chevron-down" class_name="toc-chevron" size="16" />
+                <DocsIcon icon="chevron-down" class_name="toc-chevron" size="16" />
                 <svg class="toc-ring" role="progressbar" viewBox="0 0 18 18" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" width="18" height="18">
                     <circle class="toc-ring-track" cx="9" cy="9" r="7.5" fill="none" stroke-width="1.5"/>
                     <circle class="toc-ring-progress" cx="9" cy="9" r="7.5" fill="none" stroke-width="1.5" stroke="currentColor" stroke-dasharray="47.12388980384689" stroke-dashoffset="47.12388980384689" stroke-linecap="round" transform="rotate(-90 9 9)"/>
@@ -159,7 +159,7 @@ class Props(BaseModel):
     }
 
     /* Comma/period step through headings. The key binding itself lives in
-       ShortcutsOverlay.ep, with the other global shortcuts. */
+       DocsShortcutsOverlay.ep, with the other global shortcuts. */
     document.addEventListener("epresso:shortcut", function(e) {
         if (e.detail === "section-prev") jump(-1);
         else if (e.detail === "section-next") jump(1);

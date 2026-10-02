@@ -1,0 +1,9 @@
+---
+repo = site.config.site.repository
+---
+
+{% if repo %}
+    <DocsIconButton href={repo} external aria_label="GitHub repository" title="GitHub repository">
+        <DocsIcon icon="github" />
+    </DocsIconButton>
+{% endif %}

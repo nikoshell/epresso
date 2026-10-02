@@ -23,11 +23,11 @@ class Props(BaseModel):
             </span>
         {% endif %}
         <button type="button" class="code-btn code-lines-btn" aria-pressed="false" aria-label="Show line numbers" title="Show line numbers">
-            <Icon icon="code-lines" />
+            <DocsIcon icon="code-lines" />
         </button>
         <button type="button" class="code-btn code-copy" aria-label="Copy code" title="Copy code">
-            <Icon icon="code-copy" class_name="code-copy-icon code-copy-icon--copy" />
-            <Icon icon="code-check" class_name="code-copy-icon code-copy-icon--check" />
+            <DocsIcon icon="code-copy" class_name="code-copy-icon code-copy-icon--copy" />
+            <DocsIcon icon="code-check" class_name="code-copy-icon code-copy-icon--check" />
         </button>
     </span>
 </div>

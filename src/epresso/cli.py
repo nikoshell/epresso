@@ -290,60 +290,6 @@ def _status(perf: bool, start: float, msg: str) -> None:
         log.info(msg)
 
 
-def _join_base(main: str, section: str) -> str:
-    parts = [p for p in ((main or "").strip("/"), (section or "").strip("/")) if p]
-    return "/" + "/".join(parts) + "/" if parts else "/"
-
-
-def _build_docs_sections(site: Site) -> None:
-    """Build each ``[docs]`` section into ``<dist>/<out>`` with its base."""
-    import os
-    import shutil
-
-    sections = site.config.docs
-    if not sections:
-        return
-    from .docsgen import auto_docs_project
-
-    out_dir = site.config.dir_output()
-    for sec in sections:
-        src = (site.config.root / sec.source).resolve()
-        if not src.is_dir():
-            log.error(f"docs section source not found: {src}")
-            raise typer.Exit(1)
-        eff_base = _join_base(site.config.build.base, sec.base)
-        out = sec.out or sec.base.strip("/")
-        prev = os.environ.get("EPRESSO_BASE")
-        os.environ["EPRESSO_BASE"] = eff_base
-        try:
-            if (src / "site.toml").is_file():
-                child = Site.load(src, env=site.config.env, load=False)
-            else:
-                theme = (
-                    Path(sec.theme)
-                    if sec.theme
-                    else bundled_docs_theme()
-                )
-                tmp = Path(auto_docs_project(src, DEFAULT_PORT, theme))
-                child = Site.load(tmp, env=site.config.env, load=False)
-            child.build()
-            target = out_dir / out
-            if target.exists():
-                shutil.rmtree(target)
-            target.mkdir(parents=True, exist_ok=True)
-            for item in child.config.dir_output().iterdir():
-                if item.is_dir():
-                    shutil.copytree(item, target / item.name)
-                else:
-                    shutil.copy2(item, target / item.name)
-            log.info(f"  ✓ docs {sec.base} → {target}")
-        finally:
-            if prev is None:
-                os.environ.pop("EPRESSO_BASE", None)
-            else:
-                os.environ["EPRESSO_BASE"] = prev
-
-
 @app.command()
 def build(
     root: Path = typer.Argument(".", help="Project directory"),
@@ -384,7 +330,6 @@ def build(
     )
     for w in result.asset_warnings:
         log.warn(f"⚠️ {w}")
-    _build_docs_sections(site)
     if perf:
         _print_perf(result)
     if prof is not None:
@@ -448,12 +393,25 @@ def docs(
     out: Path | None = typer.Option(None, "--out", help="Write a static production build to this directory instead of serving"),
 ) -> None:
     """Build the documentation; serve it (default port 4321) or write it with --out."""
-    from .docsgen import auto_docs_project, materialize_docs_source  # noqa: PLC0415
+    from .docsgen import auto_docs_project, docs_toml_project, materialize_docs_source  # noqa: PLC0415
 
     _start = time.monotonic()
     bundled = bundled_docs_theme()
+    cwd = Path.cwd()
     if root is None:
-        doc_root = bundled
+        # cwd site.toml → build it; docs.toml or a docs/ dir → the docs plugin;
+        # otherwise the bundled theme (epresso's own docs).
+        if (cwd / "site.toml").is_file():
+            doc_root = cwd
+        elif (cwd / "docs.toml").is_file() or (cwd / "docs").is_dir():
+            _status(perf, _start, f"📖 Rendering docs from {cwd}…")
+            try:
+                doc_root = docs_toml_project(cwd / "docs.toml", port, theme)
+            except EpressoError as e:
+                typer.secho(str(e), fg=typer.colors.RED, err=True)
+                raise typer.Exit(1) from e
+        else:
+            doc_root = bundled
     else:
         try:
             doc_root = materialize_docs_source(root, Path.cwd() / ".cache" / "repos")
@@ -469,6 +427,13 @@ def docs(
             )
             raise typer.Exit(1)
     doc_root = doc_root.resolve()
+    if not (doc_root / "site.toml").exists() and (doc_root / "docs.toml").is_file():
+        _status(perf, _start, f"📖 Rendering docs from {doc_root / 'docs.toml'}…")
+        try:
+            doc_root = docs_toml_project(doc_root / "docs.toml", port, theme)
+        except EpressoError as e:
+            typer.secho(str(e), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from e
     if not (doc_root / "site.toml").exists():
         if doc_root.is_dir():
             # Bare Markdown directory → render with the docs theme (bundled by default).

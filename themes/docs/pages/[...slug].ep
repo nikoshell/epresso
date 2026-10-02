@@ -62,6 +62,7 @@ def get_static_paths():
                     "markdown": md_path if md_body else "",
                     "crumbs": crumbs_for(by_id, d.id),
                     "source": c.get("source", ""),
+                    "source_url": c.get("source_url", ""),
                     "prev": {"url": f"/{prev.id}/", "title": prev.data.title} if prev else None,
                     "next": {"url": f"/{nxt.id}/", "title": nxt.data.title} if nxt else None,
                     "headings": d.headings,
@@ -84,10 +85,10 @@ def get_static_paths():
     return routes
 ---
 
-<Doc title={props.title + ' · ' + site.config.site.name} current={params.slug | default('')} headings={params.headings | default([])} path={route.path}>
-    <Breadcrumbs crumbs={params.crumbs} />
+<DocsPage title={props.title + ' · ' + site.config.site.name} current={params.slug | default('')} headings={params.headings | default([])} path={route.path}>
+    <DocsBreadcrumbs crumbs={params.crumbs} />
     {% if page_actions %}
-        <PageActions source={params.source} markdown={params.markdown} prev={params.prev} next={params.next} />
+        <DocsPageActions source={params.source} source_url={params.source_url} markdown={params.markdown} prev={params.prev} next={params.next} />
     {% endif %}
     <article class="doc">
         <h1>
@@ -98,8 +99,8 @@ def get_static_paths():
                 {{ props.description }}
             </p>
         {% endif %}
-        <Markdown content={content} />
-        <Pager prev={params.prev} next={params.next} />
+        <DocsMarkdown content={content} />
+        <DocsPager prev={params.prev} next={params.next} />
     </article>
     <div class="doc-end-pad"></div>
-</Doc>
+</DocsPage>

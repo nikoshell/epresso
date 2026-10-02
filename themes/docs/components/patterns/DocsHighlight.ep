@@ -10,7 +10,7 @@ class Props(BaseModel):
 ---
 
 <pre class="highlight{% if props.classes %} {{ props.classes }}{% endif %}">
-  <CodeHead lang={props.lang} file={props.file} />
+  <DocsCodeHead lang={props.lang} file={props.file} />
   <div class="code-body no-numbers">{{ content | safe }}</div>
 </pre>
 

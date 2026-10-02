@@ -290,13 +290,14 @@ class BuildGraph:
         if cc.exists():
             files.append(("content.config.py", cc.read_bytes()))
         # External layers are code too: a changed local layer (or a re-fetched repo)
-        # must invalidate the cache. A layer contributes only `components/` and
-        # `layouts/` (ADR-0003), so hash just those. Walking the whole checkout
+        # must invalidate the cache. A layer contributes `components/`, `layouts/`,
+        # `styles/`, `assets/`, `public/` (and plugin routes from `pages/`), so hash
+        # just those. Walking the whole checkout
         # pulled in `.git/` and any stray file, reading megabytes per build and
         # invalidating the cache on every git command. Prefixed so a name shared
         # with a site root is still distinguishable.
         for i, base in enumerate(layer_dirs or []):
-            for sub in ("components", "layouts"):
+            for sub in ("components", "layouts", "pages", "styles", "assets", "public"):
                 root = base / sub
                 if not root.is_dir():
                     continue

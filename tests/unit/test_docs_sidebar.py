@@ -8,7 +8,7 @@ so an edge only fades while there is content beyond it.
 from pathlib import Path
 
 _THEME = Path(__file__).resolve().parents[2] / "themes" / "docs"
-_SRC = (_THEME / "components" / "navigation" / "NavAccordion.ep").read_text(encoding="utf-8")
+_SRC = (_THEME / "components" / "navigation" / "DocsNavAccordion.ep").read_text(encoding="utf-8")
 
 
 def test_label_only_rows_do_not_hover():

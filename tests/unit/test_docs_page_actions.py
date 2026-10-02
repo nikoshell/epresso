@@ -11,7 +11,7 @@ from pathlib import Path
 from epresso.site import Site
 
 _THEME = Path(__file__).resolve().parents[2] / "themes" / "docs"
-_SRC = (_THEME / "components" / "controls" / "PageActions.ep").read_text(encoding="utf-8")
+_SRC = (_THEME / "components" / "controls" / "DocsPageActions.ep").read_text(encoding="utf-8")
 
 
 def _flat(s: str) -> str:
@@ -108,8 +108,10 @@ def test_menu_is_a_native_disclosure_so_links_survive_without_js():
 
 
 def test_source_item_needs_a_repository():
+    # source_url is computed when docs load, so blank the repo and reload.
     site = _site()
     site.config.site.repository = ""
+    site._do_load()
     block = _block(site)
     assert 'id="page-menu"' in block
     assert "View as Markdown" in block
@@ -136,10 +138,10 @@ def test_control_hovers_use_a_visible_fill():
     """Same fix for the other controls that sit on --surface."""
     theme = _THEME / "components"
     for rel in (
-        "primitives/IconButton.ep",
-        "controls/SidebarToggle.ep",
-        "structure/Header.ep",
-        "patterns/ShortcutsOverlay.ep",
+        "primitives/DocsIconButton.ep",
+        "controls/DocsSidebarToggle.ep",
+        "structure/DocsHeader.ep",
+        "patterns/DocsShortcutsOverlay.ep",
     ):
         src = (theme / rel).read_text(encoding="utf-8")
         assert "background: var(--accent-soft);" in src, rel

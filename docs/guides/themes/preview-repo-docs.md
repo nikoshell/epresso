@@ -75,10 +75,19 @@ that already has its own `site.toml`, `epresso build` is the direct route.
 
 ## Branding
 
-If the source directory contains `logo.svg`, `favicon.ico`, or `styles.css`
-(`style.css` also works), they are picked up and applied to the rendered docs:
-the favicon and header logo are replaced, and the stylesheet is appended to the
-theme's global CSS so its variable overrides win.
+The docs theme ships no brand of its own: the header shows your project's name
+(the repository or directory name, or `title` in `docs.toml`) and the site uses
+the default favicon. Brand it by putting files next to your docs:
+
+| File | Becomes |
+|------|---------|
+| `logo.svg` | the header logo (shown instead of the name) |
+| `favicon.ico` | the favicon |
+| `og-image.png` | the social preview image (`og:image`) |
+| `styles.css` / `style.css` | appended to the theme stylesheet, so its variable overrides win |
+
+Or set them explicitly in `[theme]` (`logo`, `favicon`, `og_image`, as paths
+under the output root); an explicit key wins over a file.
 
 ## Next
 

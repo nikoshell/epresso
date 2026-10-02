@@ -11,7 +11,7 @@ from pathlib import Path
 from epresso.site import Site
 
 _THEME = Path(__file__).resolve().parents[2] / "themes" / "docs"
-_SRC = (_THEME / "components" / "patterns" / "ShortcutsOverlay.ep").read_text(encoding="utf-8")
+_SRC = (_THEME / "components" / "patterns" / "DocsShortcutsOverlay.ep").read_text(encoding="utf-8")
 
 
 def _page(site: Site, path: str = "/basics/components/") -> str:
@@ -81,7 +81,7 @@ def test_shortcuts_overlay_owns_every_global_binding():
 def test_pager_is_a_zero_js_component():
     """The pager only ever needed script for [ / ]: the overlay follows its
     links off the hooks it exposes, so it stays markup + CSS."""
-    pager = (_THEME / "components" / "controls" / "Pager.ep").read_text(encoding="utf-8")
+    pager = (_THEME / "components" / "controls" / "DocsPager.ep").read_text(encoding="utf-8")
     assert "<script>" not in pager
     assert "data-pager-prev" in pager and "data-pager-next" in pager
     assert 'follow("data-pager-prev")' in _SRC  # the overlay does the work
@@ -91,8 +91,8 @@ def test_action_owners_keep_only_stateful_actions():
     """Search and the ToC keep an epresso:shortcut listener: their actions need
     state the overlay doesn't own (results/selection, current heading)."""
     theme = _THEME / "components"
-    toc = (theme / "navigation" / "Toc.ep").read_text(encoding="utf-8")
-    search = (theme / "patterns" / "SearchOverlay.ep").read_text(encoding="utf-8")
+    toc = (theme / "navigation" / "DocsToc.ep").read_text(encoding="utf-8")
+    search = (theme / "patterns" / "DocsSearchOverlay.ep").read_text(encoding="utf-8")
     assert 'if (e.detail === "search") open();' in search
     assert 'if (e.detail === "section-prev") jump(-1);' in toc
     assert 'else if (e.detail === "section-next") jump(1);' in toc

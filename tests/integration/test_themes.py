@@ -82,7 +82,7 @@ def test_scaffold_docs_uses_in_repo_theme(tmp_path):
     msg = themes.scaffold("docs", dest)
     assert "copied from" in msg
     assert (dest / "site.toml").exists()
-    assert (dest / "layouts" / "Base.ep").exists()
+    assert (dest / "layouts" / "DocsBase.ep").exists()
     assert (dest / "pages").is_dir()
     # build artifacts are never scaffolded
     assert not (dest / "dist").exists()

@@ -5,11 +5,11 @@
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-header">
         <div class="site-header-inner">
-            <a class="brand{% if site.config.theme.get('logo') %} brand--logo{% endif %}" href="{{ url('/') }}">
+            <a class="brand{% if site.config.theme.get('brand_dot') %} brand--dot{% endif %}" href="{{ url('/') }}">
                 {% if site.config.theme.get('logo') %}
-                    <img class="brand-logo" src="/{{ site.config.theme.logo }}" alt="{{ site.config.site.name }}" />
+                    <img class="brand-logo" src="/{{ site.config.theme.logo.lstrip('/') }}" alt="{{ site.config.site.name }}" />
                 {% else %}
-                    <span class="brand-logo" role="img" aria-label="epresso"></span>
+                    <span class="brand-name">{{ site.config.site.name }}</span>
                 {% endif %}
             </a>
             <nav class="header-nav">
@@ -18,12 +18,12 @@
                 </div>
             </nav>
             <div class="header-actions">
-                <SearchButton />
-                <GitHubLink />
-                <SidebarToggle />
+                <DocsSearchButton />
+                <DocsGitHubLink />
+                <DocsSidebarToggle />
             </div>
             <button class="nav-toggle" id="nav-toggle" type="button" aria-controls="nav-menu" aria-expanded="false" aria-label="Open menu">
-                <Icon icon="menu" size="20" />
+                <DocsIcon icon="menu" size="20" />
             </button>
         </div>
         <div class="nav-scrim" aria-hidden="true"></div>
@@ -127,7 +127,9 @@
     gap: var(--space-sm);
 }
 
-.brand::before {
+/* epresso's own mark: the (environment-coloured) dot before the wordmark.
+   Opt-in via [theme] brand_dot = true — other projects' docs don't get it. */
+.brand--dot::before {
     margin: 0 0 12px 0px;
     content: "";
     width: 0.5rem;
@@ -140,33 +142,19 @@
     text-decoration: none;
 }
 
-/* The epresso wordmark svg is monochrome (#f6f4f1, for the dark header).
-       An external <img> can't be recolored by page CSS, so render it as a mask
-       over a theme-aware background color instead: #1b1b1b on light, #f6f4f1 on
-       dark (color-scheme follows the OS, or the dev toolbar's override). */
+/* No logo: the site name as a text wordmark. */
+.brand-name {
+    font-family: var(--font-display, inherit);
+    font-weight: 600;
+    font-size: 1.15rem;
+    color: var(--brand-logo);
+}
+
+/* Logo ([theme] logo, or logo.svg next to the docs): the file is the header image. */
 .brand-logo {
     display: block;
     height: calc(var(--header-h) * 0.52);
-    /* ~29px at 56px header; width follows 16:5 */
-    aspect-ratio: 16 / 5;
-    /* epresso.svg intrinsic 320x100 */
-    background-color: var(--brand-logo);
-    -webkit-mask: url("/epresso.svg") no-repeat center / 100% 100%;
-    mask: url("/epresso.svg") no-repeat center / 100% 100%;
-}
-
-/* Optional user logo (site.config.theme.logo): use the file as the header
-       image and hide the env-dot ::before + the default mask wordmark. */
-.brand--logo::before {
-    display: none;
-}
-
-.brand--logo .brand-logo {
     width: auto;
-    aspect-ratio: auto;
-    background: none;
-    -webkit-mask: none;
-    mask: none;
 }
 
 .header-nav {

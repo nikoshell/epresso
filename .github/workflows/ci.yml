@@ -44,6 +44,17 @@ jobs:
           uv run --project ${{ github.workspace }} epresso build .
           test -f dist/index.html && echo "smoke build OK"
 
+      - name: Verify the built package (sdist → wheel) renders docs
+        run: |
+          set -e
+          uv build -o /tmp/epresso-dist
+          uv venv /tmp/epresso-pkg
+          uv pip install --python /tmp/epresso-pkg/bin/python /tmp/epresso-dist/*.whl
+          rm -rf /tmp/epresso-md && mkdir -p /tmp/epresso-md/docs && cd /tmp/epresso-md
+          printf '# Hello\n\nFrom a bare dir.\n' > docs/index.md
+          /tmp/epresso-pkg/bin/epresso docs --out /tmp/epresso-md/out
+          grep -q "From a bare dir" out/index.html && echo "installed epresso docs OK"
+
   perf:
     name: build-time regression gate
     runs-on: ubuntu-latest

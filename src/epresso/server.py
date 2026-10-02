@@ -176,15 +176,16 @@ class DevServer:
             if img.is_file() and self.site.config.dir_output().resolve() in img.parents:
                 return FileResponse(img)
         # public/ files live at the URL root (/favicon.ico → public/favicon.ico)
-        pub_root = self.site.config.dir_static().resolve()
-        pub = (pub_root / rel).resolve()
-        if pub == pub_root or pub_root in pub.parents:
-            if pub.is_file():
-                return FileResponse(pub)
-            # directory index (e.g. a static subsite at public/docs/ served at /docs/)
-            idx = pub / "index.html"
-            if pub.is_dir() and idx.is_file():
-                return FileResponse(idx)
+        layer_roots = list(getattr(self.site.assets, "layer_roots", []))
+        for pub_root in [self.site.config.dir_static().resolve(), *((r / "public").resolve() for r in layer_roots)]:
+            pub = (pub_root / rel).resolve()
+            if pub == pub_root or pub_root in pub.parents:
+                if pub.is_file():
+                    return FileResponse(pub)
+                # directory index (e.g. a static subsite at public/docs/ served at /docs/)
+                idx = pub / "index.html"
+                if pub.is_dir() and idx.is_file():
+                    return FileResponse(idx)
         # top-level assets/ files (favicon.svg, robots.txt) are copied to the output
         # root at build time; serve them at the root URL in dev too.
         assets_root = self.site.config.dir_assets()
@@ -197,7 +198,8 @@ class DevServer:
             return FileResponse(top)
         # assets/ + styles/ files are served under /assets/<file> (strip the prefix)
         rel2 = rel[len("assets/") :] if rel.startswith("assets/") else rel
-        for base in (assets_root, self.site.config.dir_styles()):
+        layer_assets = [r / sub for r in layer_roots for sub in ("assets", "styles")]
+        for base in (assets_root, self.site.config.dir_styles(), *layer_assets):
             ass = (base / rel2).resolve()
             if ass.is_file() and base.resolve() in ass.parents:
                 # CSS entry points (e.g. tailwind.css with @import) must be processed
@@ -215,6 +217,13 @@ class DevServer:
                             headers={"Cache-Control": "no-cache"},
                         )
                 return FileResponse(ass)
+        # caps.add_static trees (e.g. epresso_docs source images) under their prefix
+        for src_dir, prefix in getattr(self.site.assets, "extra_static", []):
+            pre = prefix.strip("/") + "/"
+            if rel.startswith(pre):
+                f = (src_dir / rel[len(pre):]).resolve()
+                if f.is_file() and src_dir.resolve() in f.parents:
+                    return FileResponse(f)
         # Fall back to the bundled default favicon so /favicon.ico never 404s.
         if rel == "favicon.ico":
             default = Path(__file__).resolve().parent / "static" / "favicon.ico"

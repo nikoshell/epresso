@@ -26,7 +26,7 @@ def test_deep_page_head_tags():
     assert 'property="og:title" content="Components · epresso"' in html
     assert 'property="og:type" content="website"' in html
     assert f'property="og:url" content="{_SITE_URL}basics/components/"' in html
-    assert f'property="og:image" content="{_SITE_URL}epresso.png"' in html
+    assert f'property="og:image" content="{_SITE_URL}_docs-assets/0/og-image.png"' in html
     assert 'name="twitter:card" content="summary_large_image"' in html
 
 

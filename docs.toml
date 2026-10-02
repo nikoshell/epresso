@@ -1,0 +1,8 @@
+# `epresso docs` from the repo root: epresso's own docs, with epresso's mark.
+title = "epresso"
+
+[[sources]]
+source = "docs"
+
+[theme]
+brand_dot = true

@@ -1,0 +1,6 @@
+---
+---
+
+<DocsIconButton id="search-open" aria_label="Search" aria_haspopup="dialog">
+    <DocsIcon icon="search" />
+</DocsIconButton>

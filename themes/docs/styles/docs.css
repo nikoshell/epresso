@@ -100,7 +100,7 @@ html[data-theme="dark"] {
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+  src: url('/docs-theme/fonts/IBMPlexMono-Regular.woff2') format('woff2');
 }
 
 @font-face {
@@ -108,7 +108,7 @@ html[data-theme="dark"] {
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url('/fonts/IBMPlexMono-Medium.woff2') format('woff2');
+  src: url('/docs-theme/fonts/IBMPlexMono-Medium.woff2') format('woff2');
 }
 
 @font-face {
@@ -116,7 +116,7 @@ html[data-theme="dark"] {
   font-style: normal;
   font-weight: 100 900; /* variable font */
   font-display: swap;
-  src: url('/fonts/IBMPlexSans.woff2') format('woff2');
+  src: url('/docs-theme/fonts/IBMPlexSans.woff2') format('woff2');
 }
 
 @font-face {
@@ -124,7 +124,7 @@ html[data-theme="dark"] {
   font-style: normal;
   font-weight: 100 900; /* variable font */
   font-display: swap;
-  src: url('/fonts/SpaceGrotesk.woff2') format('woff2');
+  src: url('/docs-theme/fonts/SpaceGrotesk.woff2') format('woff2');
 }
 
 /* ── Reset & page base ───────────────────── */

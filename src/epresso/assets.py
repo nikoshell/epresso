@@ -16,6 +16,8 @@ from typing import Any
 from .css import CSSProcessor
 from .pipeline import bundle_js, file_digest
 
+_SKIP_STATIC = {"dist", "node_modules", "__pycache__"}  # build output inside a docs source (dot-dirs skipped too)
+
 
 class AssetPipeline:
     def __init__(self, config: Any) -> None:
@@ -23,15 +25,20 @@ class AssetPipeline:
         self._assets: dict[str, Path] = {}  # hashed URL -> source file
         self._bundled: list[Path] = []  # esbuild output files
         self._warnings: list[str] = []
+        # Layer roots (``[layers]`` / ``caps.add_layer``): their ``assets/``,
+        # ``styles/`` and ``public/`` are used after the site's own (site wins).
+        self.layer_roots: list[Path] = []
+        # Extra (dir, url_prefix) trees copied verbatim (``caps.add_static``).
+        self.extra_static: list[tuple[Path, str]] = []
 
     # -- reference resolution ------------------------------------------------
     def resolve(self, name: str) -> str:
         """Return the (hashed) public URL for an asset under ``assets/`` or ``styles/``."""
         rel = name.lstrip("/")
-        src = self.config.dir_assets() / rel
-        if not src.is_file():
-            src = self.config.dir_styles() / rel
-        if not src.is_file():
+        dirs = [self.config.dir_assets(), self.config.dir_styles()]
+        dirs += [r / sub for r in self.layer_roots for sub in ("assets", "styles")]
+        src = next((d / rel for d in dirs if (d / rel).is_file()), None)
+        if src is None:
             return "/assets/" + rel
         if not self.config.assets.hash:
             return "/assets/" + rel
@@ -44,6 +51,7 @@ class AssetPipeline:
     # -- build ---------------------------------------------------------------
     def build(self, out_dir: Path) -> None:
         self._copy_static(out_dir)
+        self._copy_extra_static(out_dir)
         self._copy_root_assets(out_dir)
         self._copy_default_favicon(out_dir)
         self._copy_hashed_assets(out_dir)
@@ -76,18 +84,37 @@ class AssetPipeline:
     def _copy_static(self, out_dir: Path) -> None:
         from .private import is_private
 
-        static = self.config.dir_static()
-        if not static.exists():
-            return
-        for f in static.rglob("*"):
-            if not f.is_file():
+        seen: set[Path] = set()  # first root wins: the site's public/, then each layer's
+        for static in [self.config.dir_static(), *(r / "public" for r in self.layer_roots)]:
+            if not static.exists():
                 continue
-            if is_private(f.relative_to(static)):
-                continue  # skip _-prefixed files/dirs
-            rel = f.relative_to(static)
-            dst = out_dir / rel
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(f, dst)
+            for f in static.rglob("*"):
+                if not f.is_file():
+                    continue
+                rel = f.relative_to(static)
+                if is_private(rel) or rel in seen:
+                    continue  # skip _-prefixed files/dirs and files an earlier root ships
+                seen.add(rel)
+                dst = out_dir / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(f, dst)
+
+    def _copy_extra_static(self, out_dir: Path) -> None:
+        """Copy each ``caps.add_static`` dir (minus Markdown and ``_``-private files)."""
+        from .private import is_private
+
+        for src, prefix in self.extra_static:
+            if not src.is_dir():
+                continue
+            for f in src.rglob("*"):
+                rel = f.relative_to(src)
+                if not f.is_file() or is_private(rel) or f.suffix.lower() in {".md", ".markdown"}:
+                    continue
+                if any(p.startswith(".") or p in _SKIP_STATIC for p in rel.parts[:-1]):
+                    continue
+                dst = out_dir / prefix.strip("/") / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(f, dst)
 
     def _copy_hashed_assets(self, out_dir: Path) -> None:
         from .minify import minify_css

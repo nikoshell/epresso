@@ -143,3 +143,43 @@ def test_materialize_docs_source_rejects_a_bad_ref(tmp_path):
     repo = _make_repo(tmp_path / "repo", {"docs/index.md": "# Hi\n"})
     with pytest.raises(EpressoError, match="could not fetch docs"):
         materialize_docs_source(f"file://{repo}@no-such-ref", tmp_path / "cache")
+
+
+def test_branding_styles_css_lands_in_the_theme_stylesheet(tmp_path):
+    from epresso.docsgen import auto_docs_project
+
+    src = tmp_path / "md"
+    src.mkdir()
+    (src / "index.md").write_text("# Hi\n\nx\n", encoding="utf-8")
+    (src / "styles.css").write_text(":root { --brand-marker: 1; }\n", encoding="utf-8")
+    proj = auto_docs_project(src, 4321)
+    assert "--brand-marker" in (proj / "styles" / "docs.css").read_text(encoding="utf-8")
+
+
+def test_auto_docs_project_names_the_site_after_the_source(tmp_path):
+    import tomllib
+
+    from epresso.docsgen import auto_docs_project
+
+    src = tmp_path / "pwndbg"
+    src.mkdir()
+    (src / "index.md").write_text("# Hi\n\nx\n", encoding="utf-8")
+    proj = auto_docs_project(src, 4321)
+    assert tomllib.loads((proj / "site.toml").read_text(encoding="utf-8"))["site"]["name"] == "pwndbg"
+
+
+def test_epresso_brand_dot_is_dropped_for_other_projects_and_kept_via_docs_toml(tmp_path):
+    import tomllib
+
+    from epresso.docsgen import auto_docs_project, docs_toml_project
+    from epresso.themes import bundled_docs_theme
+
+    assert tomllib.loads((bundled_docs_theme() / "site.toml").read_text())["theme"]["brand_dot"] is True
+    src = tmp_path / "proj"
+    (src / "docs").mkdir(parents=True)
+    (src / "docs" / "index.md").write_text("# Hi\n\nx\n", encoding="utf-8")
+    other = tomllib.loads((auto_docs_project(src, 4321) / "site.toml").read_text())
+    assert "brand_dot" not in other["theme"]
+    (src / "docs.toml").write_text('[theme]\nbrand_dot = true\n', encoding="utf-8")
+    ours = tomllib.loads((docs_toml_project(src / "docs.toml", 4321) / "site.toml").read_text())
+    assert ours["theme"]["brand_dot"] is True

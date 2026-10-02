@@ -9,7 +9,7 @@ def get_static_paths():
     return [Route(path="/", data=overview, cache_key=overview.digest)]
 ---
 
-<Doc title={site.config.site.name} current="" headings={[]} path={route.path}>
+<DocsPage title={site.config.site.name} current="" headings={[]} path={route.path}>
     <article class="doc">
         <h1>
             {{ props.title }}
@@ -19,6 +19,6 @@ def get_static_paths():
                 {{ props.description }}
             </p>
         {% endif %}
-        <Markdown content={content} />
+        <DocsMarkdown content={content} />
     </article>
-</Doc>
+</DocsPage>

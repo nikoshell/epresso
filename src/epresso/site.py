@@ -25,7 +25,7 @@ from .logger import get_logger
 from .markdown import render_markdown
 from .plugins import PluginManager
 from .render import RenderSession
-from .routing import Route, RouteError, discover_route_patterns, expand_pattern, output_path_for
+from .routing import Route, RouteError, discover_route_patterns, expand_pattern, output_path_for, plugin_route_pattern
 from .templates import bind_globals, build_environment, render_markdown_page
 
 __all__ = ["Site", "BuildResult"]
@@ -201,8 +201,7 @@ class Site:
     def _do_load(self) -> None:
         self.store = ContentStore()  # idempotent reload: recreate the store
         self.layers = resolve_layers(self.config)  # external component/layout roots
-        layer_dirs = [layer.root for layer in self.layers]
-        self.graph = BuildGraph(self.store, self.config, layer_dirs)  # fresh graph + cache per load
+        self._extra_routes: list[tuple[str, Path]] = []  # plugin routes (caps.add_route)
         self.assets = AssetPipeline(self.config)  # fresh reference map per load
         self.images = ImagePipeline(self.config)  # fresh transform map per load
         self._link_resolver = None  # rebuild from fresh routes on (re)load
@@ -210,7 +209,10 @@ class Site:
         self._source_transforms = []  # likewise; they are per-environment too
         self._page_templates = {}  # fresh Jinja environment => compiled page templates are stale
         self._routes = None  # routes hold the previous load's entries
-        self.plugins.run_hook("before_load", self)
+        self.plugins.run_hook("before_load", self)  # may add layers/routes/collections
+        layer_dirs = [layer.root for layer in self.layers]
+        self.graph = BuildGraph(self.store, self.config, layer_dirs)  # fresh graph + cache per load
+        self.assets.layer_roots = layer_dirs
         # Phase timings for `epresso build --perf` and bench/run.py; cheap enough
         # to always collect (two perf_counter pairs per load).
         self._perf = {}
@@ -253,6 +255,8 @@ class Site:
                 if entry.file_path and content_dir in entry.file_path.parents:
                     rel = entry.file_path.parent.relative_to(content_dir)
                     image_base = "/content/" + rel.as_posix() + "/"
+                else:  # loader-published (e.g. epresso_docs sources)
+                    image_base = (entry.computed or {}).get("image_base") or None
                 # image_base is not part of the entry digest, so fold it into the
                 # cache key (identical bodies in different dirs render differently).
                 cache_key = f"{entry.digest}:{image_base or ''}" if entry.digest else ""
@@ -314,6 +318,7 @@ class Site:
         if self._routes is not None:
             return self._routes
         patterns = discover_route_patterns(self.config.dir_pages())
+        patterns += [plugin_route_pattern(rel, file) for rel, file in getattr(self, "_extra_routes", [])]
         routes: list[Route] = []
         if self.config.build.redirects:
             from .routing import redirect_routes

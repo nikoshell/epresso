@@ -197,6 +197,11 @@ class Capabilities:
     def config(self) -> Any:
         return self.site.config
 
+    @property
+    def options(self) -> dict[str, Any]:
+        """This plugin's ``[plugin.<name>]`` table from site.toml (``{}`` if absent)."""
+        return self.site.config.plugin.get(self.plugin.name, {})
+
     # -- templates ----------------------------------------------------------
     def add_global(self, name: str, value: Any) -> None:
         """Expose ``value`` as a template global named ``name``."""
@@ -274,6 +279,31 @@ class Capabilities:
             base = self.site.config.root
             installed.loader.base = (base / installed.loader.base).resolve()
         installed.loader.load(self.site.store, installed)
+
+    def add_layer(self, root: Path | str) -> None:
+        """Add a component/layout root (like a ``[layers] use`` entry), after the site's own."""
+        self._require_load_phase("add_layer")
+        from .layers import Layer  # noqa: PLC0415
+
+        root = Path(root).resolve()
+        self.site.layers.append(Layer(source=str(root), kind="path", root=root))
+
+    def add_route(self, rel: str, file: Path | str) -> None:
+        """Serve ``file`` as if it were ``pages/<rel>`` (e.g. ``"[...slug].ep"``)."""
+        self._require_load_phase("add_route")
+        self.site._extra_routes.append((rel, Path(file)))
+
+    def add_static(self, directory: Path | str, url_prefix: str) -> None:
+        """Publish ``directory``'s files (not Markdown) verbatim under ``url_prefix``."""
+        self._require_load_phase("add_static")
+        self.site.assets.extra_static.append((Path(directory).resolve(), url_prefix))
+
+    def _require_load_phase(self, what: str) -> None:
+        if self.phase != self._LOAD_PHASE:
+            raise CapabilityError(
+                f"{what}() must run in the 'before_load' hook. (phase is {self.phase!r})",
+                plugin=self.plugin.name,
+            )
 
     def add_markdown_extension(self, spec: str) -> None:
         """Register a markdown extension (idempotent) for content rendering."""

@@ -380,3 +380,72 @@ def test_project_plugins_py_hooks_run_in_order(tmp_path):
     assert calls.index("on_setup") < calls.index("before_build")
     assert calls.index("before_load") < calls.index("after_load")
     assert calls.index("before_build") < calls.index("after_build")
+
+
+def test_options_reads_own_plugin_table_from_site_toml():
+    seen = {}
+
+    def before_load(caps):
+        seen["mine"] = caps.options
+
+    toml = '[plugin.opts]\nsources = [{ source = "docs", prefix = "/" }]\n[plugin.other]\nx = 1\n'
+    _build({"site.toml": toml, "pages/index.md": "# Hi\n"}, Plugin(name="opts", hooks={"before_load": before_load}))
+    assert seen["mine"] == {"sources": [{"source": "docs", "prefix": "/"}]}
+
+
+def test_options_empty_when_table_absent():
+    seen = {}
+    _build({"pages/index.md": "# Hi\n"}, Plugin(name="none", hooks={"on_setup": lambda c: seen.update(o=c.options)}))
+    assert seen["o"] == {}
+
+
+def test_add_route_and_add_layer_serve_files_outside_the_site(tmp_path):
+    lib = tmp_path / "lib"
+    (lib / "components").mkdir(parents=True)
+    (lib / "components" / "Hello.ep").write_text("<p>hello from layer</p>\n", encoding="utf-8")
+    (lib / "pages").mkdir()
+    (lib / "pages" / "hi.ep").write_text("---\n---\n<Hello />\n", encoding="utf-8")
+
+    def before_load(caps):
+        caps.add_layer(lib)
+        caps.add_route("extra/hi.ep", lib / "pages" / "hi.ep")
+
+    site = _build({"pages/index.md": "# Hi\n"}, Plugin(name="lib", hooks={"before_load": before_load}))
+    assert "hello from layer" in _out(site, "extra/hi/index.html")
+
+
+def test_add_route_outside_before_load_is_rejected():
+    with pytest.raises((CapabilityError, PluginError)):
+        _build({"pages/index.md": "# Hi\n"}, Plugin(name="late", hooks={"on_setup": lambda c: c.add_route("x.ep", "x.ep")}))
+
+
+def test_layer_assets_styles_and_public_ship_site_first(tmp_path):
+    lib = tmp_path / "lib"
+    (lib / "layouts").mkdir(parents=True)
+    (lib / "styles").mkdir()
+    (lib / "styles" / "lib.css").write_text("body{color:red}\n", encoding="utf-8")
+    (lib / "public").mkdir()
+    (lib / "public" / "lib.txt").write_text("from layer\n", encoding="utf-8")
+    (lib / "public" / "both.txt").write_text("layer\n", encoding="utf-8")
+    (lib / "components").mkdir()
+    (lib / "components" / "Css.ep").write_text('<link rel="stylesheet" href="{{ asset(\'lib.css\') }}">\n', encoding="utf-8")
+
+    site = _build(
+        {"pages/index.ep": "---\n---\n<Css />\n", "public/both.txt": "site\n"},
+        Plugin(name="lib", hooks={"before_load": lambda c: c.add_layer(lib)}),
+    )
+    out = site.config.dir_output()
+    html = _out(site)
+    href = html.split('href="')[1].split('"')[0]
+    assert href.startswith("/assets/lib.") and (out / href.lstrip("/")).is_file()
+    assert (out / "lib.txt").read_text() == "from layer\n"
+    assert (out / "both.txt").read_text() == "site\n"
+
+
+def test_removed_docs_section_is_a_clear_config_error(tmp_path):
+    from epresso.config import load_config
+    from epresso.errors import ConfigError
+
+    (tmp_path / "site.toml").write_text('[[docs]]\nsource = "docs"\n', encoding="utf-8")
+    with pytest.raises(ConfigError, match="epresso_docs"):
+        load_config(tmp_path)

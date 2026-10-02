@@ -24,13 +24,15 @@ Then use them exactly like your own components:
 
 ## What a layer is
 
-A layer is a directory shaped like a site root. epresso reads two of its
-subdirectories:
+A layer is a directory shaped like a site root. epresso reads these
+subdirectories, always **after** the site's own (the site wins on a clash):
 
 ```tree
 my-components/
   components/        # <Name>.ep, resolved by basename across subdirs
   layouts/           # shell components (searched after components/)
+  styles/  assets/   # files asset('name') can resolve
+  public/            # copied to the output root (a site file of the same path wins)
 ```
 
 Everything else in the directory is ignored. Per-component scoped `<style>` and
@@ -86,11 +88,11 @@ Layers (the site's own components/ + layouts/ win; then these in order):
 
 ## Scope
 
-v1 layers contribute `components/` and `layouts/` only. They do **not**
-contribute `pages/`, `content/`, `styles/`, `assets/` or `site.toml` — the site
-owns those. Global CSS belongs in a component's `<style is:global>`; an
-external component that needs an image should use inline SVG or a site-owned
-asset.
+Layers contribute `components/`, `layouts/`, `styles/`, `assets/` and
+`public/`. They do **not** contribute `pages/`, `content/` or `site.toml` — the
+site owns those (a plugin can serve a layer's page with `caps.add_route`).
+Because the site wins every name clash, give a layer's stylesheet and shell
+names that won't collide (the docs theme uses `DocsBase` and `styles/docs.css`).
 
 ## Packages vs plugins
 

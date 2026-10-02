@@ -1,4 +1,4 @@
-plugins = ["epresso_pandoc", "epresso_mkdocs_tabs", "epresso_umami", "epresso_page_feedback"]
+plugins = ["epresso_docs", "epresso_pandoc", "epresso_mkdocs_tabs", "epresso_umami", "epresso_page_feedback"]
 
 [site]
 name = "epresso"
@@ -31,8 +31,8 @@ enabled = true
 index = "search-index.json"
 
 [markdown]
-components = ["Highlight"]  # render fenced code blocks server-side
-code_component = "Highlight"
+components = ["DocsHighlight"]  # render fenced code blocks server-side
+code_component = "DocsHighlight"
 
 [seo.rss]
 # Disabled: docs are served at their flattened path; the rss url_template can't
@@ -43,6 +43,9 @@ path = "/rss.xml"
 url_template = ""
 
 [theme]
+# epresso's own mark (green env dot before the logo); `epresso docs` drops it
+# when it renders another project's docs with this theme.
+brand_dot = true
 # Which subdir of the source repo holds the docs (e.g. "docs" or "_posts").
 # Override with the EPRESSO_DOCS_DIR env var.
 docs_dir = "docs"

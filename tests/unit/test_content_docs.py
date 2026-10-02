@@ -166,3 +166,47 @@ def test_unordered_categories_fall_back_to_default_then_alpha(tmp_path: Path):
     ids = _ordered_ids(_load(tmp_path))
     # both default 1000 -> alphabetical by dir name
     assert ids == ["abc/y", "zed/x"]
+
+
+def _mounts(tmp_path: Path, files: dict[str, dict[str, str]], mounts):
+    from epresso.content.docs import DocsMount
+
+    for src, tree in files.items():
+        for rel, text in tree.items():
+            p = tmp_path / src / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+    store = ContentStore()
+    col = Collection("docs", schema=Doc)
+    store.register(col)
+    DocsLoader(mounts=[DocsMount(base=tmp_path / m.pop("src"), **m) for m in mounts]).load(store, col)
+    return {e.id: e for e in col.all()}
+
+
+def test_mounts_merge_under_prefixes_with_one_prev_next_chain(tmp_path: Path):
+    docs = _mounts(
+        tmp_path,
+        {"a": {"index.md": "# Home\n\nhi\n", "guide.md": "# Guide\n\nx\n"}, "b": {"usage.md": "# Usage\n\ny\n"}},
+        [
+            {"src": "a"},
+            {"src": "b", "prefix": "/plugins/b/", "title": "Plugin B", "repo_url": "https://github.com/o/b/blob/v1/docs"},
+        ],
+    )
+    assert set(docs) == {"", "guide", "plugins/b", "plugins/b/usage"}
+    usage = docs["plugins/b/usage"].computed
+    assert usage["group"] == "Plugin B"
+    assert usage["source_url"] == "https://github.com/o/b/blob/v1/docs/usage.md"
+    assert docs["guide"].computed["source_url"] == ""
+    # generated section hub: a label only, no page
+    assert docs["plugins/b"].computed["has_page"] is False
+    # prev/next runs across sources
+    assert docs["guide"].computed["next"]["url"] == "/plugins/b/usage/"
+
+
+def test_mounts_duplicate_id_is_an_error(tmp_path: Path):
+    import pytest
+
+    from epresso.errors import ContentError
+
+    with pytest.raises(ContentError, match="duplicate docs page 'guide'.*prefix"):
+        _mounts(tmp_path, {"a": {"guide.md": "# A\n\nx\n"}, "b": {"guide.md": "# B\n\ny\n"}}, [{"src": "a"}, {"src": "b"}])

@@ -167,30 +167,6 @@ class LayersConfig(BaseModel):
     use: list[str] = Field(default_factory=list)
 
 
-class DocsSection(BaseModel):
-    """A docs section built into the site's output under ``base``.
-
-    Declarative equivalent of ``EPRESSO_BASE=/docs/ epresso docs --out dist/docs <source>``.
-    Use ``[docs]`` for one section or ``[[docs]]`` for several.
-    """
-
-    source: str = "docs"  # Markdown dir (or a project dir with its own site.toml)
-    base: str = "/docs/"  # public sub-path within the site
-    theme: str = ""  # theme project for bare Markdown (default: bundled docs theme)
-    out: str = ""  # output subdir of dist/ (default: derived from base)
-
-    @field_validator("base")
-    @classmethod
-    def _norm_base(cls, v: str) -> str:
-        v = (v or "/docs/").strip()
-        return "/" + v.strip("/") + "/"
-
-    @field_validator("out")
-    @classmethod
-    def _norm_out(cls, v: str) -> str:
-        return (v or "").strip().strip("/")
-
-
 class Config(BaseModel):
     site: SiteConfig = Field(default_factory=SiteConfig)
     build: BuildConfig = Field(default_factory=BuildConfig)
@@ -200,25 +176,18 @@ class Config(BaseModel):
     seo: SeoConfig = Field(default_factory=SeoConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     dev: DevConfig = Field(default_factory=DevConfig)
-    docs: list[DocsSection] = Field(default_factory=list)
     redirects: list[dict[str, str | dict]] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)  # dotted paths, e.g. "mypkg:MyPlugin"
     layers: LayersConfig = Field(default_factory=LayersConfig)  # extra component/layout roots
     # Opaque theme configuration. Core only carries this through; themes read
     # and interpret it (e.g. ``[theme] sidebar = "tree"``). Core stays agnostic.
     theme: dict[str, Any] = Field(default_factory=dict)
+    # Opaque per-plugin options: ``[plugin.<name>]`` tables, read via ``caps.options``.
+    plugin: dict[str, dict[str, Any]] = Field(default_factory=dict)
     env: str | None = None  # active environment name (from --env / EPRESSO_ENV)
 
     # --- file locations -------------------------------------------------
     root: Path = Field(default_factory=lambda: Path.cwd())
-
-    @field_validator("docs", mode="before")
-    @classmethod
-    def _docs(cls, v: Any) -> Any:
-        """Accept a single ``[docs]`` table or an array ``[[docs]]``."""
-        if v is None:
-            return []
-        return [v] if isinstance(v, dict) else v
 
     @field_validator("redirects")
     @classmethod
@@ -340,6 +309,13 @@ def load_config(root: Path | None = None, env: str | None = None) -> Config:
                 raise ConfigError(f"invalid {env_path.name}: {e}", path=str(env_path)) from e
     if env:
         data = _deep_merge(data, {"env": env})
+    if "docs" in data:  # removed in favour of the epresso_docs plugin
+        raise ConfigError(
+            "`[docs]` / `[[docs]]` was removed — docs sections are now the epresso_docs plugin",
+            path=str(path),
+            fix='plugins = ["epresso_docs"] and [plugin.epresso_docs] base = "/docs/" '
+            'with sources = [{ source = "docs" }]',
+        )
     # If the project lives in a git repo and ``site.repository`` / ``site.branch``
     # aren't set explicitly in TOML, default them from the repo's ``origin`` URL
     # and HEAD branch (these drive "view source / edit this page" links).

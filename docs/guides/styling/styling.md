@@ -60,10 +60,9 @@ optional.
 
 Components from a [layer](guides/extending/layers.md) carry their scoped `<style>`
 and `<script>` exactly like site components, so a library's per-component styles
-work with no extra setup. Global CSS from a layer must travel in a
-`<style is:global>` block inside one of its components — v1 layers contribute
-`components/` and `layouts/` only, so `asset()` cannot reach a layer's
-`styles/` or `assets/`.
+work with no extra setup. A layer's `styles/` and `assets/` are searched by
+`asset()` after the site's own, so a layer can ship a stylesheet — give it a
+name the site won't shadow (the docs theme uses `styles/docs.css`).
 
 ## Fonts
 

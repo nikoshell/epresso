@@ -1,6 +1,6 @@
 # epresso
 
-![epresso](https://raw.githubusercontent.com/nikoshell/epresso/main/themes/docs/public/epresso.png)
+![epresso](https://raw.githubusercontent.com/nikoshell/epresso/main/docs/og-image.png)
 
 A modern, **Python-first static site generator** — routes-as-code, content collections, deterministic + incremental builds, and a no-JavaScript-by-default philosophy.
 

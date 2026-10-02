@@ -187,20 +187,20 @@ def copy_docs_assets(source: Path, public_base: Path, docs_dir: str) -> None:
             shutil.copy2(src_f, out)
 
 
-def _set_theme_key(tmp: Path, key: str, value: str) -> None:
-    """Write/update a ``[theme] <key> = "..."`` in the temp project's site.toml."""
+def _set_theme_key(tmp: Path, key: str, value: object) -> None:
+    """Write/update a ``[theme] <key> = <value>`` in the temp project's site.toml."""
     p = tmp / "site.toml"
     if not p.exists():
         return
     s = p.read_text(encoding="utf-8")
-    val = value.replace("\\", "\\\\").replace('"', '\\"')
+    line = f"{key} = {_toml_value(value)}"
     if re.search(r"(?m)^\[theme\]\s*$", s):
         if re.search(rf"(?m)^{re.escape(key)}\s*=", s):
-            s = re.sub(rf"(?m)^{re.escape(key)}\s*=.*$", f'{key} = "{val}"', s, count=1)
+            s = re.sub(rf"(?m)^{re.escape(key)}\s*=.*$", lambda _m: line, s, count=1)
         else:
-            s = re.sub(r"(?m)^\[theme\]\s*$", f'[theme]\n{key} = "{val}"', s, count=1)
+            s = re.sub(r"(?m)^\[theme\]\s*$", lambda _m: f"[theme]\n{line}", s, count=1)
     else:
-        s += f"\n[theme]\n{key} = \"{val}\"\n"
+        s += f"\n[theme]\n{line}\n"
     p.write_text(s, encoding="utf-8")
 
 
@@ -208,7 +208,7 @@ def _apply_branding(tmp: Path, source: Path) -> None:
     """Apply optional branding from the docs source directory, if present.
 
     ``favicon.ico`` replaces the theme default; ``styles.css`` is appended to the
-    theme's global.css (so its CSS-variable/color overrides win); ``logo.svg``
+    theme's docs.css (so its CSS-variable/color overrides win); ``logo.svg``
     becomes the header logo (removing the env dot / default wordmark).
     """
 
@@ -227,7 +227,7 @@ def _apply_branding(tmp: Path, source: Path) -> None:
             extra = cand
             break
     if extra is not None:
-        gcss = tmp / "styles" / "global.css"
+        gcss = tmp / "styles" / "docs.css"
         if gcss.exists():
             with gcss.open("a", encoding="utf-8") as fh:
                 fh.write("\n\n/* docs styles.css override */\n")
@@ -248,19 +248,8 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     theme project is copied and the source is injected as its ``content/docs``
     collection content, so it renders fully with the docs theme.
     """
-    if theme is None:
-        theme = bundled_docs_theme()
-    theme = theme.resolve()
-    tmp = Path(tempfile.mkdtemp(prefix="epresso-docs-"))
-    for item in theme.iterdir():
-        if item.name in (".cache", "dist", "__pycache__", "content"):
-            continue
-        dst = tmp / item.name
-        if item.is_dir():
-            shutil.copytree(item, dst)
-        else:
-            shutil.copy(item, dst)
-    (tmp / "content").mkdir(exist_ok=True)
+    theme = (theme or bundled_docs_theme()).resolve()
+    tmp = _copy_theme(theme)
     docs_dir = os.environ.get("EPRESSO_DOCS_DIR") or os.environ.get("REPO_DOCS") or _theme_option(theme, "docs_dir", "docs")
     docs_dir = docs_dir.strip("/") or "docs"
     docs_dir_path = tmp / "content" / "docs"
@@ -271,6 +260,86 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     patch_site_toml(tmp, port, source, docs_base=docs_dir_path.resolve())
     # Optional branding (logo.svg / favicon.ico / styles.css) from the source directory.
     _apply_branding(tmp, source)
+    return tmp
+
+
+def _copy_theme(theme: Path) -> Path:
+    """Copy a theme project (minus build output/content) into a fresh temp dir."""
+    tmp = Path(tempfile.mkdtemp(prefix="epresso-docs-"))
+    for item in theme.iterdir():
+        if item.name in (".cache", "dist", "__pycache__", "content"):
+            continue
+        dst = tmp / item.name
+        if item.is_dir():
+            shutil.copytree(item, dst)
+        else:
+            shutil.copy(item, dst)
+    (tmp / "content").mkdir(exist_ok=True)
+    return tmp
+
+
+def _toml_value(v: object) -> str:
+    """A scalar / list / inline table as TOML (json strings are valid TOML basic strings)."""
+    import json  # noqa: PLC0415
+
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{json.dumps(str(k))} = {_toml_value(x)}" for k, x in v.items()) + "}"
+    return json.dumps(str(v))
+
+
+def docs_toml_project(path: Path, port: int, theme: Path | None = None) -> Path:
+    """Compile a ``docs.toml`` into a temp docs-theme project (``site.toml``).
+
+    A missing ``docs.toml`` means the defaults (one source: ``./docs``).
+    ``docs.toml`` takes the ``[plugin.epresso_docs]`` keys (``sources``, ``base``)
+    plus an optional ``title``, ``theme`` and ``[site]`` table. Local sources
+    resolve against the ``docs.toml`` directory.
+    """
+    import tomllib  # noqa: PLC0415
+
+    from .errors import ConfigError  # noqa: PLC0415
+
+    here = path.parent.resolve()
+    try:
+        cfg = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"invalid docs.toml: {e}", path=str(path)) from e
+    theme_opts = cfg["theme"] if isinstance(cfg.get("theme"), dict) else {}
+    if theme is None and isinstance(cfg.get("theme"), str) and cfg["theme"]:
+        theme = here / cfg["theme"]
+    theme = (theme or bundled_docs_theme()).resolve()
+    tmp = _copy_theme(theme)
+    sources = []
+    for src in cfg.get("sources") or [{"source": "docs"}]:
+        src = dict(src)
+        local = here / str(src.get("source", "docs"))
+        if local.is_dir():
+            src["source"] = str(local.resolve())
+        sources.append(src)
+    patch_site_toml(tmp, port, here)
+    site_toml = tmp / "site.toml"
+    s = site_toml.read_text(encoding="utf-8")
+    site_keys = dict(cfg.get("site") or {})
+    if cfg.get("title"):
+        site_keys.setdefault("name", cfg["title"])
+    for key, val in site_keys.items():
+        line = f"{key} = {_toml_value(val)}"
+        if re.search(rf"(?m)^{re.escape(key)}\s*=", s):
+            s = re.sub(rf"(?m)^{re.escape(key)}\s*=.*$", lambda _m, line=line: line, s, count=1)
+        else:
+            s = s.replace("[site]\n", f"[site]\n{line}\n", 1)
+    plugin = {k: v for k, v in cfg.items() if k not in ("title", "theme", "site", "sources")}
+    plugin["sources"] = sources
+    s += "\n[plugin.epresso_docs]\n" + "".join(f"{k} = {_toml_value(v)}\n" for k, v in plugin.items())
+    site_toml.write_text(s, encoding="utf-8")
+    for key, val in theme_opts.items():  # docs.toml [theme] table: theme options
+        _set_theme_key(tmp, key, val)
     return tmp
 
 
@@ -294,6 +363,10 @@ def patch_site_toml(tmp: Path, port: int, source: Path, docs_base: Path | None =
         return
     s = p.read_text(encoding="utf-8")
     s = re.sub(r'url\s*=\s*"[^"]*"', f'url = "http://127.0.0.1:{port}"', s, count=1)
+    # The theme's own site.toml names epresso's site; the copy documents ``source``.
+    name = (repo_origin(source).rstrip("/").rsplit("/", 1)[-1] or source.resolve().name).replace('"', "")
+    s = re.sub(r'(?m)^name\s*=\s*"[^"]*"', lambda _m: f'name = "{name}"', s, count=1)
+    s = re.sub(r"(?m)^brand_dot\s*=.*\n", "", s)  # epresso's mark, not the project's
     if "docs_source" not in s:
         path = str(source).replace("\\", "\\\\").replace('"', '\\"')
         s = s.replace("[site]\n", f'[site]\ndocs_source = "{path}"\n', 1)

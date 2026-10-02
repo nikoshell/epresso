@@ -46,12 +46,26 @@ class Greeter(Plugin):
 | `add_filter(name, fn)`    | `on_setup`    | register a Jinja template filter                    |
 | `register_collection(...)`| `before_load` | add a content collection (via a loader) to the store |
 | `add_markdown_extension(spec)` | `before_load` | register a Markdown extension (idempotent)      |
+| `add_layer(root)`         | `before_load` | add a component/layout/asset root after the site's own |
+| `add_route(rel, file)`    | `before_load` | serve `file` as if it were `pages/<rel>` (e.g. `"[...slug].ep"`) |
+| `add_static(dir, prefix)` | `before_load` | publish `dir`'s non-Markdown files verbatim under `prefix` |
 | `transform_html(fn)`      | any           | rewrite every rendered HTML page: `fn(html, ctx) -> html` |
 | `inject_head(fragment)`   | any           | insert a fragment into `<head>` of every page      |
 
 Each hook also receives `caps.config`, `caps.site`, and `caps.logger` (a
 namespaced `[plugin:<name>]` logger; debug lines gate on
 `EPRESSO_DEBUG=plugin:<name>`).
+
+`caps.options` is the plugin's own `[plugin.<name>]` table from `site.toml`
+(`{}` when absent). Core passes it through untouched, and `site.<env>.toml`
+overrides it like any other key:
+
+```toml
+plugins = ["epresso_docs"]
+
+[plugin.epresso_docs]
+base = "/docs/"
+```
 
 Using a capability at the wrong time raises a `CapabilityError` with a hint —
 for example, `register_collection` must run in `before_load` so the collection
@@ -135,6 +149,51 @@ them).
 
 The lifecycle hooks, in order: `before_load`, `on_setup`, `after_load`,
 `before_build`, `after_build(caps, result)`, `on_assets`.
+
+## Docs from several sources: `epresso_docs`
+
+The bundled `epresso_docs` plugin owns a `docs` collection built from one or
+more Markdown sources — local directories or git repositories — merged into one
+sidebar, search index and prev/next chain:
+
+```toml
+plugins = ["epresso_docs"]
+
+[plugin.epresso_docs]
+base = "/docs/"                  # optional: docs under a path, inside this site
+
+[[plugin.epresso_docs.sources]]
+source = "docs"                  # local dir (relative to the site root)
+
+[[plugin.epresso_docs.sources]]
+source = "github:org/plugin-a@v1"
+dir = "docs"                     # dir inside the source (default "docs" for git, "." local)
+prefix = "/plugins/a/"           # URL prefix under base (default "/")
+title = "Plugin A"               # sidebar group label
+repo_url = ""                    # "view source" base override
+```
+
+Two sources producing the same page are a build error — give one a `prefix`.
+Each source's images and other non-Markdown files are published under
+`<base>/_docs-assets/<n>/`, so relative paths like `![](./img/shot.png)`
+resolve (`dist/`, `node_modules/` and dot-dirs inside a source are skipped).
+Under `base`, the host's `[markdown]` adopts the theme's code-block component
+(`DocsHighlight`) unless the host sets its own `code_component`.
+With `base` set, the plugin layers the docs theme under your site
+(`theme = "path"` picks another) and serves its docs page; your pages, layouts
+and global CSS are untouched. Without `base` the site *is* the docs theme, which
+is what `epresso docs` and `docs.toml` build.
+
+Behaviour worth knowing:
+
+- **A prefix without an `index.md`** is a sidebar section heading only — no page
+  is generated at that URL. Add an `index.md` to the source to give it a landing
+  page.
+- **The theme is brand-neutral.** It ships only its fonts (under
+  `/docs-theme/fonts/`, a name no site uses), never a logo or favicon. A
+  `logo.svg`, `favicon.ico` or `og-image.png` at a source's root brands the docs
+  pages, unless `[theme] logo` / `favicon` / `og_image` is set. Under `base` the
+  host's own favicon and pages are untouched.
 
 ## Bundled example plugins
 

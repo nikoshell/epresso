@@ -9,20 +9,24 @@ class Props(BaseModel):
 <!doctype html>
 <html lang="{{ site.config.site.language or 'en' }}">
     <head>
-        {{ seo(title=props.title or site.config.site.name, path=props.path, image=site.config.site.url.rstrip('/') ~ '/epresso.png') }}
+        {{ seo(title=props.title or site.config.site.name, path=props.path, image=(site.config.site.url.rstrip('/') ~ '/' ~ site.config.theme.og_image.lstrip('/')) if site.config.theme.get('og_image') else None) }}
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
         <meta name="color-scheme" content="light dark">
         <meta name="theme-color" content="#fafbfc" media="(prefers-color-scheme: light)">
         <meta name="theme-color" content="#0f1117" media="(prefers-color-scheme: dark)">
         <link rel="describedby" href="/llms.txt">
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" type="image/svg+xml" href="/epresso.svg">
+        {% set _icon = site.config.theme.get('favicon') %}
+        {% if _icon %}
+            <link rel="icon" href="/{{ _icon.lstrip('/') }}"{% if _icon.endswith('.svg') %} type="image/svg+xml"{% else %} sizes="any"{% endif %}>
+        {% else %}
+            <link rel="icon" href="/favicon.ico" sizes="any">
+        {% endif %}
         <script is:inline>
 /* Publishes the page breakpoint state as attributes on <html>, so
    components can branch on it with plain attribute selectors
    (works everywhere, unlike @container style()). 768/1024/1280
    are the layout breakpoints — keep them in sync with the
-   @container queries in the components (see global.css). */
+   @container queries in the components (see docs.css). */
 (function() {
     var root = document.documentElement;
     var mqNav = window.matchMedia("(max-width: 1024px)");
@@ -44,7 +48,7 @@ class Props(BaseModel):
 
 /* Crossing a breakpoint turns a drawer into (or out of) an
    off-canvas panel; that transform change must not animate.
-   See `html.epresso-resizing` in global.css. */
+   See `html.epresso-resizing` in docs.css. */
 (function() {
     var root = document.documentElement;
     var timer;
@@ -65,7 +69,7 @@ window.epressoPanelOpened = function(name) {
     }));
 };
 
-/* See `html:not(.epresso-ready)` in global.css: the closed drawers
+/* See `html:not(.epresso-ready)` in docs.css: the closed drawers
    must not animate into place when the stylesheet lands late. */
 window.addEventListener("load", function() {
     requestAnimationFrame(function() {
@@ -73,18 +77,18 @@ window.addEventListener("load", function() {
     });
 });
 </script>
-        <link rel="stylesheet" href="{{ asset('global.css') }}">
+        <link rel="stylesheet" href="{{ asset('docs.css') }}">
         <slot name="head" />
     </head>
     <body>
-        <Header />
+        <DocsHeader />
 
         <slot />
 
-        <Footer />
+        <DocsFooter />
 
-        <SearchOverlay />
-        <ShortcutsOverlay />
-        <ImageLightbox />
+        <DocsSearchOverlay />
+        <DocsShortcutsOverlay />
+        <DocsImageLightbox />
     </body>
 </html>

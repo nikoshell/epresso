@@ -15,7 +15,7 @@ server injects it:
 It is **never written into `epresso build` output** — the files on disk in
 `dist/` stay clean, and a plain static host (no epresso server) never shows it.
 
-![The toolbar docked at the bottom of a docs page.](/toolbar/bar.png)
+![The toolbar docked at the bottom of a docs page.](./img/toolbar/bar.png)
 
 ## Environment chip
 
@@ -40,14 +40,14 @@ a popup with its tag, `#id`/`.classes`, and the component source that produced
 it. Click the element to pin it (the popup stays, and the highlight is kept);
 click the little open button to jump to that source in your editor.
 
-![Hovering an element in inspect mode highlights it and shows its source.](/toolbar/inspect.png)
+![Hovering an element in inspect mode highlights it and shows its source.](./img/toolbar/inspect.png)
 
 ## Routes
 
 Lists every HTML route on the site as a link. Click any route to go straight to
 it.
 
-![The routes panel lists every page.](/toolbar/routes.png)
+![The routes panel lists every page.](./img/toolbar/routes.png)
 
 ## Content
 
@@ -55,7 +55,7 @@ A two-column explorer over the site's content collections. The left pane is a
 tree of collections → entries; click an entry to inspect its validated front
 matter `data` and rendered body on the right.
 
-![The content tab: collection explorer (left) + entry preview (right).](/toolbar/content.png)
+![The content tab: collection explorer (left) + entry preview (right).](./img/toolbar/content.png)
 
 ## Audit
 
@@ -64,7 +64,7 @@ Runs a handful of static, on-page checks — missing `lang`, missing viewport,
 buttons with no accessible name. A red badge shows the issue count; click a
 result to highlight and scroll to the element.
 
-![The audit panel flags issues found on the page.](/toolbar/audit.png)
+![The audit panel flags issues found on the page.](./img/toolbar/audit.png)
 
 ## Project
 

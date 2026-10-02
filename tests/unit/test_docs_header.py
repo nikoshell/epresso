@@ -43,7 +43,7 @@ def test_colour_scheme_needs_no_script():
     # the palette rides on color-scheme instead: the theme pairs the two
     # Pygments palettes into one stylesheet (asserted against its source, since
     # component CSS is bundled rather than inlined in the page)
-    highlight = (_REPO / "themes" / "docs" / "components" / "patterns" / "Highlight.ep").read_text(encoding="utf-8")
+    highlight = (_REPO / "themes" / "docs" / "components" / "patterns" / "DocsHighlight.ep").read_text(encoding="utf-8")
     assert "pygments_css_pair(" in highlight
     assert 'html[data-theme="dark"]' not in highlight
 
@@ -51,7 +51,7 @@ def test_colour_scheme_needs_no_script():
 def test_only_the_dev_toolbar_pins_the_palette():
     """data-theme is an override hook: it exists so the toolbar can pin
     color-scheme; the stylesheet is where it is honoured."""
-    css = (_REPO / "themes" / "docs" / "styles" / "global.css").read_text(encoding="utf-8")
+    css = (_REPO / "themes" / "docs" / "styles" / "docs.css").read_text(encoding="utf-8")
     assert 'html[data-theme="light"] {\n  color-scheme: light;' in css
     assert 'html[data-theme="dark"] {\n  color-scheme: dark;' in css
     assert ":root {\n  color-scheme: light dark;" in css

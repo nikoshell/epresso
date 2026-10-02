@@ -40,6 +40,7 @@ trailing_slash = "always"   # always | never | ignore
 clean_urls = true
 compress_html = false  # minify HTML (skips <pre>/<script>/<style>)
 redirects = true       # emit redirect pages from the `redirects` config
+base = ""              # public sub-path for project Pages, e.g. "/repo/" (also EPRESSO_BASE)
 
 [markdown]
 backend = "native"      # renderer: "native" (Python); "rust" = optional accelerator
@@ -92,13 +93,15 @@ index = "search-index.json"
 [dev]
 toolbar = { enabled = true, placement = "bottom" }   # dev-only overlay; placement: bottom | top
 
-[[docs]]                # build a docs section into the site (repeat for several)
-source = "docs"         # Markdown dir, or a project dir with its own site.toml
-base = "/docs/"         # public sub-path within the site
-theme = ""              # theme for bare Markdown (default: the bundled docs theme)
-out = ""                # output subdir of dist/ (default: derived from base)
-
 plugins = ["mypkg:MyPlugin"]   # dotted-path plugin specs
+
+[plugin.my_plugin]             # options keyed by the plugin's name, read via caps.options
+key = "value"
+
+# Docs under a path in this site: the bundled epresso_docs plugin.
+# [plugin.epresso_docs]
+# base = "/docs/"
+# sources = [{ source = "docs" }]
 
 [layers]
 use = [                          # extra component/layout roots, layered under the site's own

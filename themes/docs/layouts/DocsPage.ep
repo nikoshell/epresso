@@ -12,25 +12,25 @@ class Props(BaseModel):
 docs = list(site.get_collection("docs"))
 ---
 
-<Base title={props.title} path={props.path}>
+<DocsBase title={props.title} path={props.path}>
 <div class="site-body">
-    <NavAccordion docs={docs} current={props.current} />
+    <DocsNavAccordion docs={docs} current={props.current} />
 
-    <Toc placement="inline" headings={props.headings} />
+    <DocsToc placement="inline" headings={props.headings} />
 
     <main class="content" id="main">
         <slot />
     </main>
 
-    <Toc placement="rail" headings={props.headings} />
+    <DocsToc placement="rail" headings={props.headings} />
 </div>
-</Base>
+</DocsBase>
 
 <style>
 .site-body {
     display: grid;
     /* Mobile-first baseline: single column. No-JS fallback — without the
-           state attributes published by Base.ep this is all that applies. */
+           state attributes published by DocsBase.ep this is all that applies. */
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
     grid-template-areas:
@@ -54,7 +54,7 @@ docs = list(site.get_collection("docs"))
         "sidebar content";
 }
 
-/* Page structure follows the state published by Base.ep on <html>. */
+/* Page structure follows the state published by DocsBase.ep on <html>. */
 :global(html[data-toc-mode="rail"]) .site-body {
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr) minmax(var(--toc-w), 18rem);
     grid-template-rows: auto;

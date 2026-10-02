@@ -4,7 +4,7 @@
 <div id="search-overlay" class="search-overlay" role="dialog" aria-modal="true" aria-label="Search">
     <div class="search-box">
         <div class="search-input-wrap">
-            <Icon icon="search" />
+            <DocsIcon icon="search" />
             <input id="search-input" class="search-input" type="search" placeholder="Search the docs…" autocomplete="off">
         </div>
         <div id="search-results" class="search-results"></div>
@@ -350,7 +350,7 @@
         if (first) first.classList.add("active");
     }
 
-    /* Ctrl/⌘K is bound in ShortcutsOverlay.ep (the single owner of global
+    /* Ctrl/⌘K is bound in DocsShortcutsOverlay.ep (the single owner of global
        shortcuts); it broadcasts "search". Everything below is the open
        dialog's own navigation. */
     document.addEventListener("epresso:shortcut", function(e) {

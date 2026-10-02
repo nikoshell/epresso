@@ -13,4 +13,4 @@ no remote-provider fetch). Fonts are handled the same as any static asset:
 - **Remote fonts**: link the provider's stylesheet in your layout `<head>` as
   usual.
 
-The docs theme self-hosts its fonts via `styles/global.css` + `public/`.
+The docs theme self-hosts its fonts via `styles/docs.css` + `public/`.

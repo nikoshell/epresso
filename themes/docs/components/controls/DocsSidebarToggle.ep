@@ -2,7 +2,7 @@
 ---
 
 <button class="sidebar-toggle" type="button" aria-controls="sidebar-nav" aria-expanded="false" aria-label="Show navigation">
-    <Icon icon="sidebar" size="18" />
+    <DocsIcon icon="sidebar" size="18" />
 </button>
 
 <style>

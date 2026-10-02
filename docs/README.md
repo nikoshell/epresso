@@ -5,7 +5,7 @@ description: A modern, Python-first static site generator.
 
 # epresso
 
-![epresso](/epresso.png)
+![epresso](./og-image.png)
 
 Welcome to **epresso** — a Python-first static site generator built around
 content collections, code-as-routes pages, and no-JavaScript-by-default output.

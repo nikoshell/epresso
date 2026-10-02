@@ -3,7 +3,7 @@ from pydantic import BaseModel
 
 # Every icon used anywhere in components/, one entry each. "attrs" is the
 # <svg>'s own attributes (viewBox, fill/stroke) verbatim from wherever it used
-# to be pasted inline; "body" is its inner markup. Icon.ep only adds what
+# to be pasted inline; "body" is its inner markup. DocsIcon.ep only adds what
 # every icon needs generically: aria-hidden, and an optional width/height/class.
 ICONS = {
     "search": {
@@ -11,7 +11,7 @@ ICONS = {
         "body": '<path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"/>',
     },
     "caret": {
-        # NavAccordion.ep builds its markup as a Python string, not template
+        # DocsNavAccordion.ep builds its markup as a Python string, not template
         # composition, so it keeps its own copy of this one; see the comment there.
         "attrs": 'viewBox="0 0 16 16" fill="currentColor"',
         "body": '<path d="M6.97 4.03a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 1 1-1.06-1.06L9.94 8 6.97 5.03a.75.75 0 0 1 0-1.06Z"/>',

@@ -3,14 +3,13 @@ from pydantic import BaseModel
 
 
 class Props(BaseModel):
-    source: str = ""
+    source: str = ""  # repo-relative path, shown as the hint
+    source_url: str = ""  # full "view source" URL (epresso_docs); hidden when empty
     markdown: str = ""  # site-root path of this page's .md sibling, e.g. /basics/routing.md
     prev: dict | None = None
     next: dict | None = None
 
 
-repo = site.config.site.repository
-branch = site.config.site.branch
 site_url = (site.config.site.url or "").rstrip("/")
 # Absolute URL of the markdown sibling, for the "open in <AI>" links. No base
 # prefix here: site.url already carries the project-Pages subpath. In the
@@ -23,8 +22,8 @@ ask = "Ask questions about this page"
 <div class="page-actions">
     <div class="pa-group{% if not props.markdown %} pa-group--solo{% endif %}">
         <button type="button" class="pa-btn pa-copy" id="page-copy" data-md="{{ url(props.markdown) if props.markdown else '' }}" aria-label="Copy page">
-            <Icon icon="pa-copy" class_name="pa-icon pa-icon--copy" />
-            <Icon icon="pa-check" class_name="pa-icon pa-icon--check" />
+            <DocsIcon icon="pa-copy" class_name="pa-icon pa-icon--copy" />
+            <DocsIcon icon="pa-check" class_name="pa-icon pa-icon--check" />
             <span class="pa-label">
                 <span class="pa-label-live">Copy page</span>
                 <span class="pa-label-copied">Copied</span>
@@ -33,7 +32,7 @@ ask = "Ask questions about this page"
         {% if props.markdown %}
             <details class="pa-menu" id="page-menu">
                 <summary class="pa-btn pa-more" aria-label="More options" title="More options">
-                    <Icon icon="caret" />
+                    <DocsIcon icon="caret" />
                 </summary>
                 <ul class="pa-menu-list">
                     <li>
@@ -48,9 +47,9 @@ ask = "Ask questions about this page"
                             <span class="pa-hint">Open this page as plain Markdown</span>
                         </a>
                     </li>
-                    {% if repo and props.source %}
+                    {% if props.source_url %}
                         <li>
-                            <a href="{{ repo }}/blob/{{ branch }}/{{ props.source }}" target="_blank" rel="noopener">
+                            <a href="{{ props.source_url }}" target="_blank" rel="noopener">
                                 <span class="pa-item-label">View source of this page</span>
                                 <span class="pa-hint">
                                     {{ props.source }}

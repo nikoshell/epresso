@@ -31,7 +31,7 @@ Build a directory of Markdown as a documentation site and serve it (default port
 4321), or write a static build with `--out`.
 
 ```bash
-epresso docs                                 # the bundled docs example
+epresso docs                                 # ./site.toml, ./docs.toml or ./docs/ (else the bundled example)
 epresso docs ../my-repo                      # a local checkout
 epresso docs github:owner/repo@v1            # clone + render a remote repo
 epresso docs https://github.com/owner/repo   # same, by URL
@@ -46,11 +46,46 @@ epresso docs ../my-repo --out dist/docs      # static build, no server
   later runs; delete that directory to re-fetch a moved ref) and rendered. The
   clone keeps its `.git`, so the repository links below resolve to that repo.
 - **project** — a directory with a `site.toml`, built as-is.
+- **`docs.toml`** — a directory with a `docs.toml` (and no `site.toml`): the
+  docs theme with the `epresso_docs` plugin, fed by the sources it lists (see
+  below).
 - **bare Markdown directory** — epresso copies the docs theme into a temporary
   project, injects the Markdown as its docs collection, and renders it, so any
   directory of Markdown previews without writing a config. Inside a git checkout
   it copies the markdown under the docs directory (default `docs/`, override with
   `EPRESSO_DOCS_DIR` or `REPO_DOCS`) plus a root README.
+
+With no argument, `epresso docs` uses the current directory: its `site.toml`
+if there is one, otherwise its `docs.toml` or `docs/` directory, otherwise the
+bundled example.
+
+### Several sources: `docs.toml`
+
+```toml
+title = "My Project"            # → [site] name
+
+[[sources]]
+source = "docs"                 # local dir, relative to docs.toml
+
+[[sources]]
+source = "github:org/plugin-a@v1"
+dir = "docs"                    # dir inside the source (default "docs" for git, "." local)
+prefix = "/plugins/a/"          # URL prefix (default "/")
+title = "Plugin A"              # sidebar group label
+
+[site]                          # optional overrides for the generated site.toml
+url = "https://docs.example.com/"
+
+[theme]                         # optional theme options (or `theme = "path"` for another theme)
+logo = "logo.svg"
+```
+
+Every source merges into one docs collection — one sidebar, one search index,
+one prev/next chain. Two sources producing the same page are a build error;
+give one a `prefix`. `docs.toml` is a shorthand: epresso compiles it into a
+`site.toml` with `plugins = ["epresso_docs"]` and a `[plugin.epresso_docs]`
+table, which is exactly what a full site would write. Without `sources` it
+reads `./docs`. Relative images in every source resolve (see the plugins guide).
 
 ### The link back to the repository
 
