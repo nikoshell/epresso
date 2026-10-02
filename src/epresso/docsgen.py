@@ -367,6 +367,8 @@ def patch_site_toml(tmp: Path, port: int, source: Path, docs_base: Path | None =
     name = (repo_origin(source).rstrip("/").rsplit("/", 1)[-1] or source.resolve().name).replace('"', "")
     s = re.sub(r'(?m)^name\s*=\s*"[^"]*"', lambda _m: f'name = "{name}"', s, count=1)
     s = re.sub(r"(?m)^brand_dot\s*=.*\n", "", s)  # epresso's mark, not the project's
+    # epresso.top's own URL redirects, not the project's
+    s = re.sub(r'(?m)^\[\[redirects\]\]\n(?:"[^"\n]*"\s*=\s*"[^"\n]*"\n)+\n?', "", s)
     if "docs_source" not in s:
         path = str(source).replace("\\", "\\\\").replace('"', '\\"')
         s = s.replace("[site]\n", f'[site]\ndocs_source = "{path}"\n', 1)

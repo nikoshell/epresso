@@ -210,3 +210,12 @@ def test_mounts_duplicate_id_is_an_error(tmp_path: Path):
 
     with pytest.raises(ContentError, match="duplicate docs page 'guide'.*prefix"):
         _mounts(tmp_path, {"a": {"guide.md": "# A\n\nx\n"}, "b": {"guide.md": "# B\n\ny\n"}}, [{"src": "a"}, {"src": "b"}])
+
+
+def test_readme_and_placeholder_index_make_one_landing_page(tmp_path: Path):
+    (tmp_path / "README.md").write_text("# Project\n\nreal intro\n", encoding="utf-8")
+    (tmp_path / "index.md").write_text("[//]: <> (replaced by README in CI)\n", encoding="utf-8")
+    (tmp_path / "guide.md").write_text("# Guide\n\nx\n", encoding="utf-8")
+    docs = _load(tmp_path)
+    assert set(docs) == {"", "guide"}
+    assert docs[""].computed["has_page"] is True

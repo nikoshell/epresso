@@ -183,3 +183,15 @@ def test_epresso_brand_dot_is_dropped_for_other_projects_and_kept_via_docs_toml(
     (src / "docs.toml").write_text('[theme]\nbrand_dot = true\n', encoding="utf-8")
     ours = tomllib.loads((docs_toml_project(src / "docs.toml", 4321) / "site.toml").read_text())
     assert ours["theme"]["brand_dot"] is True
+
+
+def test_epresso_redirects_do_not_leak_into_other_projects(tmp_path):
+    import tomllib
+
+    from epresso.docsgen import auto_docs_project
+
+    src = tmp_path / "proj"
+    src.mkdir()
+    (src / "index.md").write_text("# Hi\n\nx\n", encoding="utf-8")
+    cfg = tomllib.loads((auto_docs_project(src, 4321) / "site.toml").read_text())
+    assert "redirects" not in cfg

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.1
+
+### Fixed
+- A `README.md` next to a placeholder `index.md` (e.g. pwndbg's docs) now makes one
+  landing page instead of a sidebar "Overview" entry that 404'd.
+- `epresso docs` no longer copies epresso.top's own `[[redirects]]` into other
+  projects' docs.
+
 ## 0.6.0
 
 ### Added

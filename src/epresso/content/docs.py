@@ -82,10 +82,16 @@ def _read_docs(base: Path, pattern: str, docs_dir: str) -> dict[str, dict]:
             if is_hub
             else stem.replace("-", " ").title()
         )
-        if doc_id in docs:  # collision (e.g. a hub + a same-named leaf) -> full path
-            doc_id = rel.with_suffix("").as_posix()
         body_stripped = strip_first_h1(body)
         has_page = _has_content(body_stripped)
+        if doc_id in docs and is_hub and docs[doc_id]["is_hub"]:
+            # README.md + index.md in one dir: one landing page — the one with a
+            # body (a comment-only index.md is a placeholder), else the first.
+            if not has_page or docs[doc_id]["has_page"]:
+                continue
+            del docs[doc_id]
+        if doc_id in docs:  # collision (e.g. a hub + a same-named leaf) -> full path
+            doc_id = rel.with_suffix("").as_posix()
         # A hub with no body is a category label only (no page generated); any
         # other empty file is ignored entirely.
         if not has_page and not is_hub:
