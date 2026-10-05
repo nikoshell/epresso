@@ -1,0 +1,17 @@
+---
+def get():
+    opts = site.config.plugin["epresso_blog"]["_resolved"]
+    posts = sorted(
+        (e for e in site.get_collection("blog") if e.computed["kind"] == "post"),
+        key=lambda e: e.data.date, reverse=True,
+    )
+    items = [
+        {"title": e.data.title, "url": e.computed["url"], "date": e.data.date + "T00:00:00+00:00",
+         "summary": e.data.description}
+        for e in posts[:20]
+    ]
+    return "application/rss+xml", site.rss(
+        title=f"{site.config.site.name} · Blog", description=site.config.site.description or "",
+        path=opts["_url"] + "rss.xml", items=items,
+    )
+---

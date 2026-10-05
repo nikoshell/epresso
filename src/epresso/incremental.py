@@ -107,7 +107,7 @@ class IncrementalCache:
     def prune(self, valid_paths: set[str]) -> None:
         """Drop cached paths no longer produced this build (removed route / data)."""
         # 1) Remove output files that were cached previously but are no longer valid.
-        prev_paths = ((self._prev or {}).get("paths") or {})
+        prev_paths = (self._prev or {}).get("paths") or {}
         for p, pe in prev_paths.items():
             if p not in valid_paths:
                 out_rel = pe.get("outputFile")
@@ -185,6 +185,41 @@ class RenderedBodyCache:
             pass
 
 
+_FINGERPRINT: str = ""
+
+
+def _epresso_fingerprint() -> str:
+    """epresso's own code (package + bundled plugins/themes) as a cheap stat hash.
+
+    The page cache is keyed on the project's code; without this, upgrading or
+    editing epresso itself would reuse pages the old version rendered. Stats,
+    not contents (~300 files): any reinstall or edit changes mtime/size."""
+    global _FINGERPRINT
+    if not _FINGERPRINT:
+        import epresso
+
+        pkg = Path(epresso.__file__).resolve().parent
+        roots = [pkg, pkg / "_plugins", pkg / "_themes", pkg.parent.parent / "plugins"]
+        h = hashlib.sha256(getattr(epresso, "__version__", "").encode())
+        for root in roots:
+            if not root.is_dir():
+                continue
+            for f in sorted(root.rglob("*")):
+                if f.suffix in {".py", ".ep", ".css", ".js", ".toml"} and "__pycache__" not in f.parts:
+                    st = f.stat()
+                    h.update(f"{f.relative_to(root)}:{st.st_mtime_ns}:{st.st_size}".encode())
+        _FINGERPRINT = h.hexdigest()
+    return _FINGERPRINT
+
+
+def _index_digest(entry: Any) -> str:
+    """Digest of an entry's id + authored data + computed values (not its body)."""
+    import json
+
+    data = entry.data.model_dump(mode="json") if hasattr(entry.data, "model_dump") else entry.data
+    return sha256_hex(json.dumps([entry.id, data, entry.computed], sort_keys=True, default=str))
+
+
 class BuildGraph:
     """Per-render content dependency graph + the incremental cache that consumes it.
 
@@ -238,7 +273,20 @@ class BuildGraph:
 
     # -- digest resolution --------------------------------------------------
     def current_digest(self, key: str) -> str | None:
-        """Current digest for a dependency key (``collection:<name>`` or ``<col>:<id>``)."""
+        """Current digest for a dependency key, memoised for one build (content
+        doesn't change mid-build; every page asks for the same collection keys)."""
+        memo = self.__dict__.setdefault("_digest_memo", {})
+        if key.startswith("collection") and key in memo:
+            return memo[key]
+        d = self._compute_digest(key)
+        if key.startswith("collection"):
+            memo[key] = d
+        return d
+
+    def _compute_digest(self, key: str) -> str | None:
+        if key.startswith("collection-index:"):
+            name = key[len("collection-index:") :]
+            return sha256_hex(*(_index_digest(e) for e in self.store.get_collection(name)))
         if key.startswith("collection:"):
             name = key[len("collection:") :]
             digests = sorted(e.digest for e in self.store.get_collection(name) if e.digest)
@@ -311,6 +359,7 @@ class BuildGraph:
         for rel, data in sorted(files, key=lambda x: x[0]):
             h.update(rel.encode())
             h.update(data)
+        h.update(_epresso_fingerprint().encode())
         return h.hexdigest()
 
     # -- build coordination (drives the cache adapter) -----------------------
@@ -326,6 +375,7 @@ class BuildGraph:
         whether the previous manifest is usable."""
         if clean:
             self.cache.clear()
+        self._digest_memo = {}  # a new build: content may have changed
         self._config_hash, self._code_hash = self.ensure_hashes()
         self._usable = self.cache.is_usable(self._config_hash, self._code_hash)
 

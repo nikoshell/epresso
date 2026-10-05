@@ -39,11 +39,13 @@ def test_is_repo_dir_detects_git(tmp_path):
 def test_auto_docs_project_defaults_to_bundled_docs_theme(tmp_path):
     # no theme passed → the bundled themes/docs theme is used, and the bare
     # markdown source is injected as its content/docs collection.
-    _write(tmp_path, "intro.md", "# Intro\n")
+    _write(tmp_path, "docs/intro.md", "# Intro\n")
+    _write(tmp_path, "loose.md", "# Loose\n")
     proj = auto_docs_project(tmp_path, port=9999)
     assert (proj / "site.toml").exists()
     assert (proj / "components").exists()  # the docs theme was copied in
-    assert (proj / "content" / "docs" / "intro.md").exists()  # source injected
+    assert (proj / "content" / "docs" / "intro.md").exists()  # docs/ injected
+    assert not (proj / "content" / "docs" / "loose.md").exists()  # only docs/ + README
 
 
 def _git(root: Path, *args: str) -> None:

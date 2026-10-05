@@ -60,15 +60,14 @@ if _BUNDLED_PLUGINS.is_dir() and str(_BUNDLED_PLUGINS) not in sys.path:
 # may use these same keys (or future namespaced ones) in the ``hooks`` dict.
 LIFECYCLE_HOOKS: tuple[str, ...] = (
     "before_load",  # earliest — register collections / markdown extensions here
-    "on_setup",     # environment + template globals are ready
-    "after_load",   # content is loaded + rendered
-    "before_build", # build is about to render routes
+    "on_setup",  # environment + template globals are ready
+    "after_load",  # content is loaded + rendered
+    "before_build",  # build is about to render routes
     "after_build",  # build finished — receives the BuildResult
-    "on_assets",    # before assets/images are written
+    "on_assets",  # before assets/images are written
 )
 
 HookFn = Callable[..., Any]
-
 
 
 # A host tool (an editor, a preview harness, a screenshotter) needs to instrument
@@ -293,10 +292,11 @@ class Capabilities:
         self._require_load_phase("add_route")
         self.site._extra_routes.append((rel, Path(file)))
 
-    def add_static(self, directory: Path | str, url_prefix: str) -> None:
-        """Publish ``directory``'s files (not Markdown) verbatim under ``url_prefix``."""
+    def add_static(self, directory: Path | str, url_prefix: str, exclude: tuple[str, ...] = ()) -> None:
+        """Publish ``directory``'s files (not Markdown) verbatim under ``url_prefix``,
+        minus the subdirs in ``exclude`` (relative to ``directory``)."""
         self._require_load_phase("add_static")
-        self.site.assets.extra_static.append((Path(directory).resolve(), url_prefix))
+        self.site.assets.extra_static.append((Path(directory).resolve(), url_prefix, tuple(exclude)))
 
     def _require_load_phase(self, what: str) -> None:
         if self.phase != self._LOAD_PHASE:
@@ -321,14 +321,21 @@ class Capabilities:
     # -- markdown pipeline ------------------------------------------------
     def add_markdown_source_transform(self, fn: Callable[[str], str]) -> None:
         """Register a markdown *source* transform (``str -> str``) applied before
-        rendering (e.g. Pandoc fenced-code attributes, MkDocs content tabs)."""
+        rendering (e.g. fenced-code attribute syntax, content tabs)."""
         from . import markdown as _md
 
         _md.register_markdown_transform(fn)
 
+    def add_markdown_it_plugin(self, fn: Callable[[Any], None]) -> None:
+        """Register a markdown-it-py plugin ``fn(md)`` (e.g. from ``mdit_py_plugins``)
+        on every Markdown renderer. Idempotent per function."""
+        from . import markdown as _md
+
+        _md.register_markdown_it_plugin(fn)
+
     def add_html_postprocess(self, fn: Callable[[str], str]) -> None:
         """Register an html post-processor (``str -> str``) over rendered output
-        (e.g. Pandoc image attributes)."""
+        (e.g. image attribute syntax)."""
         from . import markdown as _md
 
         _md.register_html_transform(fn)
@@ -336,7 +343,7 @@ class Capabilities:
     def add_markdown_render_transform(self, fn) -> None:
         """Register a render transform ``fn(md, src, depth) -> str`` run before the
         final markdown render (used by features that render inner Markdown, e.g.
-        MkDocs Material content tabs)."""
+        content tabs)."""
         from . import markdown as _md
 
         _md.register_markdown_render_transform(fn)
@@ -345,7 +352,8 @@ class Capabilities:
     def transform_html(self, fn: Callable[[str, dict[str, Any]], str]) -> None:
         """Rewrite every rendered HTML route: ``fn(html, ctx) -> html``.
 
-        ``ctx`` carries ``{"path", "params"}`` for the route being rendered. Pure
+        ``ctx`` carries ``{"path", "params", "data"}`` for the route being rendered
+        (``data`` is the route's content entry, if any). Pure
         functions are preferred so epresso can reason about caching.
         """
         self._require_html_target()
@@ -433,6 +441,12 @@ class PluginManager:
             for plugin in self._from_spec(spec):
                 self.register(plugin)
         self._from_project_file(root)
+        # EPRESSO_DISABLE_PLUGINS=a,b: turn named plugins off without editing
+        # site.toml (benchmarks, debugging a theme that enables them).
+        off = {n.strip() for n in os.environ.get("EPRESSO_DISABLE_PLUGINS", "").split(",") if n.strip()}
+        for plugin in self.plugins:
+            if plugin.name in off:
+                plugin.enabled = False
 
     def _from_spec(self, spec: str) -> list[Plugin]:
         """Load ``pkg.mod:Name`` or ``pkg.mod`` (all Plugin instances)."""

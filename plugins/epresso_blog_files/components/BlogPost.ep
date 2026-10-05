@@ -1,0 +1,15 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    post: dict
+    nav: dict = {}
+---
+
+<article class="doc blog-post">
+    <h1>{{ props.post.title }}</h1>
+    <BlogMeta post={props.post} />
+    <slot />
+    <BlogArchive nav={props.nav} />
+</article>

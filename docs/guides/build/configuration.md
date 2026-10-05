@@ -40,6 +40,7 @@ trailing_slash = "always"   # always | never | ignore
 clean_urls = true
 compress_html = false  # minify HTML (skips <pre>/<script>/<style>)
 redirects = true       # emit redirect pages from the `redirects` config
+jobs = 0               # render worker processes: 0 = one per CPU (max 8), 1 = serial
 base = ""              # public sub-path for project Pages, e.g. "/repo/" (also EPRESSO_BASE)
 
 [markdown]

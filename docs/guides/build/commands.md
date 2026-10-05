@@ -27,7 +27,8 @@ full rebuild; `--env <name>` selects a per-environment config.
 
 ```bash
 epresso preview   # build, then serve dist/ statically
-epresso docs      # build + serve the documentation on port 4321
+epresso docs      # epresso's own documentation on port 4321
+epresso docs .    # this project's docs (README.md + docs/, zero-config)
 epresso serve     # serve an already-built dist/ (no build)
 ```
 

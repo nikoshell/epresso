@@ -23,7 +23,15 @@ from .document import parse_document
 from .errors import RouteError
 from .pipeline import file_digest
 
-__all__ = ["Route", "RoutePattern", "discover_route_patterns", "expand_pattern", "output_path_for", "parse_route", "paginate"]
+__all__ = [
+    "Route",
+    "RoutePattern",
+    "discover_route_patterns",
+    "expand_pattern",
+    "output_path_for",
+    "parse_route",
+    "paginate",
+]
 
 
 @dataclass
@@ -107,7 +115,11 @@ def _build_path(segments: list[list[dict[str, Any]]], params: dict[str, Any], tr
             if not p["dynamic"]:
                 piece += p["content"]
             elif p["spread"]:
-                piece += "/".join(str(x) for x in params.get(p["content"], [])) if isinstance(params.get(p["content"]), list) else str(params.get(p["content"], ""))
+                piece += (
+                    "/".join(str(x) for x in params.get(p["content"], []))
+                    if isinstance(params.get(p["content"]), list)
+                    else str(params.get(p["content"], ""))
+                )
             else:
                 val = params.get(p["content"])
                 if val is None:
@@ -276,8 +288,12 @@ def plugin_route_pattern(rel: str, file: Path) -> RoutePattern:
 def _load_module(path: Path, globals_extra: dict[str, Any] | None = None) -> Any:
     name = "_epresso_route_" + "_".join(p for p in path.parts if p not in {".", ".."})
     name = (
-        name.replace("[", "_").replace("]", "_").replace(".", "_")
-        .replace("/", "_").replace("\\", "_").replace("-", "_")
+        name.replace("[", "_")
+        .replace("]", "_")
+        .replace(".", "_")
+        .replace("/", "_")
+        .replace("\\", "_")
+        .replace("-", "_")
     )
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -341,17 +357,13 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
         body, scoped_css, scripts = doc.body, doc.scoped_css, doc.scripts
         scope_hash = _scope_hash(pattern.rel)
         script_hash = _script_hash(scripts)
-        frontmatter_vars = {
-            k: v for k, v in namespace.items() if not k.startswith("_") and k != "site"
-        }
+        frontmatter_vars = {k: v for k, v in namespace.items() if not k.startswith("_") and k != "site"}
         # .ep endpoint: frontmatter exports get() -> (content_type, body), e.g. rss.xml.ep
         get_fn = namespace.get("get")
         if callable(get_fn):
             content_type, body_out = get_fn()
             path = _build_path(pattern.segments, {}, trailing)
-            return [
-                Route(path=path, content_type=content_type, body=body_out, source=pattern.file)
-            ]
+            return [Route(path=path, content_type=content_type, body=body_out, source=pattern.file)]
         gsp = namespace.get("get_static_paths")
         # Not an endpoint => body is a Jinja template: enforce components-over-
         # Jinja composition here (endpoints return generated content, skip them).
@@ -364,7 +376,10 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
             try:
                 raw_routes = gsp()
             except Exception as e:  # noqa: BLE001
-                raise RouteError(f"get_static_paths() failed in {pattern.file.name}: {e}\n{traceback.format_exc()}", path=str(pattern.file)) from e
+                raise RouteError(
+                    f"get_static_paths() failed in {pattern.file.name}: {e}\n{traceback.format_exc()}",
+                    path=str(pattern.file),
+                ) from e
             for r in list(raw_routes or []):  # type: ignore[union-attr]
                 raw_body = None
                 content_type = "text/html"
@@ -400,7 +415,21 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
                         )
                     )
                     continue
-                out.append(Route(path=path, template_str=body, params=params, data=data, source=pattern.file, cache_key=cache_key, scoped_css=scoped_css, scope_hash=scope_hash, scripts=scripts, script_hash=script_hash, frontmatter=frontmatter_vars))
+                out.append(
+                    Route(
+                        path=path,
+                        template_str=body,
+                        params=params,
+                        data=data,
+                        source=pattern.file,
+                        cache_key=cache_key,
+                        scoped_css=scoped_css,
+                        scope_hash=scope_hash,
+                        scripts=scripts,
+                        script_hash=script_hash,
+                        frontmatter=frontmatter_vars,
+                    )
+                )
             return out
         # no get_static_paths -> single static route
         return [
@@ -425,7 +454,9 @@ def expand_pattern(pattern: RoutePattern, trailing: str, data_api: Any) -> list[
         try:
             content_type, body = get_fn()
         except Exception as e:  # noqa: BLE001
-            raise RouteError(f"get() failed in {pattern.file.name}: {e}\n{traceback.format_exc()}", path=str(pattern.file)) from e
+            raise RouteError(
+                f"get() failed in {pattern.file.name}: {e}\n{traceback.format_exc()}", path=str(pattern.file)
+            ) from e
         path = _build_path(pattern.segments, {}, trailing)
         return [Route(path=path, content_type=content_type, body=body, source=pattern.file)]
 

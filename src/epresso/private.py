@@ -9,6 +9,6 @@ def is_private(path: Path) -> bool:
     """Return ``True`` if any path segment (file or directory) starts with ``_``.
 
     Files/dirs prefixed with ``_`` (e.g. ``_draft.md``, ``_partials/``) are treated
-    as private and excluded from builds (the Jekyll convention).
+    as private and excluded from builds.
     """
     return any(part.startswith("_") for part in path.parts)

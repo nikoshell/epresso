@@ -60,3 +60,26 @@ the `inkscape` or `rsvg-convert` CLI when available.
 `render_cls(name, widths, alt, cls, style="")` is the class-aware variant (used
 by component `image` helpers) and renders an `<img>` with the given CSS class and
 optional inline style.
+
+## Optimising content images
+
+`image()` is for templates. Images written in Markdown (`![Diagram](img/diagram.png)`)
+and plain `<img>` tags are optimised by the `epresso_optimize` plugin, which the
+docs theme enables:
+
+```toml
+plugins = ["epresso_optimize"]
+
+[plugin.epresso_optimize]
+widths = [400, 800, 1200]   # WebP variants, never wider than the source
+sizes = "100vw"             # the docs theme uses "(max-width: 46rem) 100vw, 46rem"
+quality = 80
+```
+
+After a production build, every local PNG/JPEG `<img>` gets WebP variants in
+`dist/images/`, a `srcset` and `sizes`, `loading="lazy"`, `decoding="async"` and
+its real `width`/`height` (so the page doesn't jump while it loads). The original
+file stays as the `src` fallback. GIF, SVG, external images and any `<img>` that
+already sets `srcset`, `loading` or `width` are left as written. `epresso dev`
+skips it; set `dev = true` to optimise there too. Encoded files are cached in
+`.cache/optimize/`.

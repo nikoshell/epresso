@@ -13,6 +13,8 @@ def _build_tree(docs):
         if d.id == "":
             continue
         c = d.computed or {}
+        if c.get("hidden"):  # built, but not listed in the nav
+            continue
         node = root
         for part in c.get("group_path", []):
             node = node["dirs"].setdefault(part, {"hub": None, "dirs": {}, "docs": []})
@@ -42,6 +44,8 @@ def _build_index(docs) -> dict:
     root = _build_tree(docs)
     dir_min: dict[tuple, int] = {}
     for d in docs:
+        if (d.computed or {}).get("hidden"):
+            continue
         gp = list((d.computed or {}).get("group_path", []))
         o = int((d.computed or {}).get("order", 0))
         for k in range(1, len(gp) + 1):
@@ -94,7 +98,7 @@ def _build_nav(docs, collapse_after=None) -> str:
     index = _index_for(docs)
     dir_min = index["dir_min"]
     root = index["root"]
-    rows = len(dir_min) + sum(1 for d in docs if d.id != "")
+    rows = len(dir_min) + sum(1 for d in docs if d.id != "" and not (d.computed or {}).get("hidden"))
     threshold = _DEFAULT_COLLAPSE_AFTER if collapse_after in (None, "") else int(collapse_after)
     compact = rows > threshold
 
@@ -160,8 +164,9 @@ def _build_nav(docs, collapse_after=None) -> str:
                 d = payload[1]
                 _dlv = len(path)
                 doc_indent = f' data-depth="{_dlv}"' if _dlv else ""
+                href = (d.computed or {}).get("link") or f"/{d.id}/"
                 parts.append(
-                    f'<li class="tree-leaf"{doc_indent}><a href="/{escape(d.id)}/">{escape(d.data.title)}</a></li>'
+                    f'<li class="tree-leaf"{doc_indent}><a href="{escape(href)}">{escape(d.data.title)}</a></li>'
                 )
         parts.append("</ul>")
         return "".join(parts)

@@ -119,12 +119,10 @@ def copy_docs_content(source: Path, dst: Path, docs_dir: str = "docs") -> dict[s
     Returns ``{}`` (kept for back-compat; no multi-repo map).
     """
     dst.mkdir(parents=True, exist_ok=True)
-    repo_mode = is_repo_dir(source)
+    git_repo = is_repo_dir(source)
+    repo_mode = True  # every source: docs/ + the top-level README (zero-config rule)
     for root, dirs, files in os.walk(source):
-        dirs[:] = [
-            d for d in dirs
-            if d not in SKIP_DIRS and (d == docs_dir or not d.startswith("_"))
-        ]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and (d == docs_dir or not d.startswith("_"))]
         rel = Path(root).relative_to(source)
         for fn in files:
             if fn.startswith("_"):
@@ -156,7 +154,7 @@ def copy_docs_content(source: Path, dst: Path, docs_dir: str = "docs") -> dict[s
             out = dst / rel_dst / fn
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_f, out)
-    if repo_mode:
+    if git_repo:
         # single-repo: mark the docs root as the repo (so the theme can detect
         # the root and the README there gets a git icon).
         (dst / ".git").mkdir(parents=True, exist_ok=True)
@@ -249,11 +247,14 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     collection content, so it renders fully with the docs theme.
     """
     theme = (theme or bundled_docs_theme()).resolve()
-    tmp = _copy_theme(theme)
-    docs_dir = os.environ.get("EPRESSO_DOCS_DIR") or os.environ.get("REPO_DOCS") or _theme_option(theme, "docs_dir", "docs")
+    tmp = _copy_theme(theme, key=source)
+    docs_dir = (
+        os.environ.get("EPRESSO_DOCS_DIR") or os.environ.get("REPO_DOCS") or _theme_option(theme, "docs_dir", "docs")
+    )
     docs_dir = docs_dir.strip("/") or "docs"
     docs_dir_path = tmp / "content" / "docs"
     copy_docs_content(source, docs_dir_path, docs_dir=docs_dir)
+    _zero_config_homepage(source, docs_dir_path, docs_dir)
     # Publish docs image assets at their /content/<docs_dir>/... URL.
     copy_docs_assets(source, tmp / "public" / "content" / docs_dir, docs_dir)
     # Point the theme's docs collection at the copy via site.toml (no env).
@@ -263,9 +264,68 @@ def auto_docs_project(source: Path, port: int, theme: Path | None = None) -> Pat
     return tmp
 
 
-def _copy_theme(theme: Path) -> Path:
-    """Copy a theme project (minus build output/content) into a fresh temp dir."""
-    tmp = Path(tempfile.mkdtemp(prefix="epresso-docs-"))
+PLACEHOLDER_HOME = """# Welcome
+
+This site has no homepage yet. Add a **`README.md`** at the top of the project:
+it becomes this page.
+
+Put the other pages in a **`docs/`** directory — every Markdown file there is
+a page, grouped by folder:
+
+```text
+my-project/
+├── README.md        ← the homepage
+└── docs/
+    ├── install.md
+    └── guide/
+        └── usage.md
+```
+
+Then run `epresso docs .` again.
+"""
+
+
+def _zero_config_homepage(source: Path, dst: Path, docs_dir: str) -> None:
+    """``README.md`` at the top is the homepage (it wins over ``docs/index.md``);
+    without one, a placeholder explains what to create. Warns about what's missing."""
+    from .logger import get_logger  # noqa: PLC0415
+
+    log = get_logger("docs")
+    readme = next((p for p in sorted(source.iterdir()) if p.is_file() and p.name.lower() == "readme.md"), None)
+    if not (source / docs_dir).is_dir():
+        log.warn(f"no {docs_dir}/ in {source} — reading pages from {docs_dir}/ (only README.md for now)")
+    home = [p for p in dst.iterdir() if p.is_file() and p.stem.lower() in {"index", "readme"}]
+    if readme is not None:
+        for p in home:
+            if p.name != readme.name:
+                log.warn(f"{docs_dir}/{p.name} ignored — README.md is the homepage")
+                p.unlink()
+        return
+    if not any(p.stem.lower() == "index" for p in home):
+        log.warn(f"no README.md in {source} — showing a placeholder homepage")
+        (dst / "index.md").write_text(PLACEHOLDER_HOME, encoding="utf-8")
+
+
+def _copy_theme(theme: Path, key: Path | str | None = None) -> Path:
+    """Copy a theme project (minus build output/content) into a temp project dir.
+
+    With ``key`` (the docs source) the dir is stable — ``<tmp>/epresso-docs-<hash>``
+    — and its ``.cache/`` survives, so repeated ``epresso docs <dir>`` runs reuse
+    the incremental build cache. Everything else is rebuilt fresh each time.
+    """
+    if key is None:
+        tmp = Path(tempfile.mkdtemp(prefix="epresso-docs-"))
+    else:
+        digest = hashlib.sha256(f"{theme.resolve()}\0{Path(key).resolve()}".encode()).hexdigest()[:12]
+        tmp = Path(tempfile.gettempdir()) / f"epresso-docs-{digest}"
+        tmp.mkdir(exist_ok=True)
+        for item in tmp.iterdir():
+            if item.name == ".cache":
+                continue
+            if item.is_dir() and not item.is_symlink():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
     for item in theme.iterdir():
         if item.name in (".cache", "dist", "__pycache__", "content"):
             continue
@@ -305,16 +365,36 @@ def docs_toml_project(path: Path, port: int, theme: Path | None = None) -> Path:
 
     from .errors import ConfigError  # noqa: PLC0415
 
-    here = path.parent.resolve()
     try:
         cfg = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"invalid docs.toml: {e}", path=str(path)) from e
+    return docs_config_project(cfg, path.parent.resolve(), port, theme, label=str(path))
+
+
+DOCS_KEYS = {"title", "theme", "site", "sources", "base", "redirects", "extra_css", "extra_javascript", "blog"}
+SOURCE_KEYS = {"source", "dir", "prefix", "title", "repo_url", "nav"}
+
+
+def docs_config_project(cfg: dict, here: Path, port: int, theme: Path | None = None, label: str = "docs.toml") -> Path:
+    """Compile a parsed ``docs.toml`` dict (or an imported ``mkdocs.yml``) into a
+    temp docs-theme project. Paths resolve against ``here``."""
+    from .errors import ConfigError  # noqa: PLC0415
+
+    for key in cfg:
+        if key not in DOCS_KEYS:
+            raise ConfigError(f"unknown docs.toml key {key!r} (allowed: {', '.join(sorted(DOCS_KEYS))})", path=label)
+    for src in cfg.get("sources") or []:
+        for key in src:
+            if key not in SOURCE_KEYS:
+                raise ConfigError(
+                    f"unknown [[sources]] key {key!r} (allowed: {', '.join(sorted(SOURCE_KEYS))})", path=label
+                )
     theme_opts = cfg["theme"] if isinstance(cfg.get("theme"), dict) else {}
     if theme is None and isinstance(cfg.get("theme"), str) and cfg["theme"]:
         theme = here / cfg["theme"]
     theme = (theme or bundled_docs_theme()).resolve()
-    tmp = _copy_theme(theme)
+    tmp = _copy_theme(theme, key=here)
     sources = []
     for src in cfg.get("sources") or [{"source": "docs"}]:
         src = dict(src)
@@ -334,12 +414,31 @@ def docs_toml_project(path: Path, port: int, theme: Path | None = None) -> Path:
             s = re.sub(rf"(?m)^{re.escape(key)}\s*=.*$", lambda _m, line=line: line, s, count=1)
         else:
             s = s.replace("[site]\n", f"[site]\n{line}\n", 1)
-    plugin = {k: v for k, v in cfg.items() if k not in ("title", "theme", "site", "sources")}
+    for r in cfg.get("redirects") or []:  # [[redirects]] {from = to}
+        s += "\n[[redirects]]\n" + "".join(f"{_toml_value(k)} = {_toml_value(v)}\n" for k, v in r.items())
+    if cfg.get("blog"):  # [blog] → [plugin.epresso_blog]
+        s += "\n[plugin.epresso_blog]\n" + "".join(f"{k} = {_toml_value(v)}\n" for k, v in cfg["blog"].items())
+    plugin = {k: v for k, v in cfg.items() if k == "base"}
     plugin["sources"] = sources
     s += "\n[plugin.epresso_docs]\n" + "".join(f"{k} = {_toml_value(v)}\n" for k, v in plugin.items())
     site_toml.write_text(s, encoding="utf-8")
     for key, val in theme_opts.items():  # docs.toml [theme] table: theme options
         _set_theme_key(tmp, key, val)
+    for key in ("extra_css", "extra_javascript"):  # copied to public/, loaded after the theme
+        urls = []
+        for rel in cfg.get(key) or []:
+            if "://" in str(rel):
+                urls.append(str(rel))
+                continue
+            src_file = (here / str(rel)).resolve()
+            if not src_file.is_file() or not src_file.is_relative_to(here):
+                raise ConfigError(f"{key}: {rel!r} is not a file under {here}", path=label)
+            dest = tmp / "public" / "docs-extra" / Path(str(rel)).name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_file, dest)
+            urls.append(f"/docs-extra/{dest.name}")
+        if urls:
+            _set_theme_key(tmp, key, urls)
     return tmp
 
 

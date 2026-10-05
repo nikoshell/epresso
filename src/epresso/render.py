@@ -130,9 +130,7 @@ class RenderSession:
 
         css_url = ""
         if self.scoped_css:
-            combined = minify_css(
-                "\n".join(self.scoped_css[k] for k in sorted(self.scoped_css))
-            )
+            combined = minify_css("\n".join(self.scoped_css[k] for k in sorted(self.scoped_css)))
             h = hashlib.sha1(combined.encode("utf-8")).hexdigest()[:12]
             out = out_dir / "_scoped" / f"epresso.{h}.css"
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -198,8 +196,7 @@ class RenderSession:
         if self._scripts_active:
             self.write_page_scripts(out_dir, cache_dir)
             tags = "".join(
-                f'<script type="module" src="/_epresso/scripts/{h}.js"></script>'
-                for h in sorted(self._scripts_active)
+                f'<script type="module" src="/_epresso/scripts/{h}.js"></script>' for h in sorted(self._scripts_active)
             )
             html = html.replace("</body>", tags + "</body>") if "</body>" in html else html + tags
 

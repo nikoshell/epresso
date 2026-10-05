@@ -21,8 +21,8 @@ DEFAULT_DOCS_DIR = "docs"
 class DocsSource:
     """Where a project's docs live and whether the (effective) root is a repo."""
 
-    docs_dir: str          # subdir name used for repo-relative source prefixes
-    base: Path             # directory the docs collection reads markdown from
+    docs_dir: str  # subdir name used for repo-relative source prefixes
+    base: Path  # directory the docs collection reads markdown from
     repo_root: Path | None  # the effective root if it is itself a git repo, else None
 
 

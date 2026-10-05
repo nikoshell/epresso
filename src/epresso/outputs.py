@@ -104,11 +104,7 @@ def write_llms(site: Any, out_dir: Path, routes: list[Any]) -> None:
     description = " ".join((cfg.description or site.config.site.description or "").split())
     base = _site_url(site)
 
-    pages = [
-        r
-        for r in routes
-        if _is_html_page(r.path) and not r.path.startswith("/404") and not r.redirect_to
-    ]
+    pages = [r for r in routes if _is_html_page(r.path) and not r.path.startswith("/404") and not r.redirect_to]
 
     def _line(route: Any) -> str:
         r_title, r_desc = _route_title_description(route)
@@ -157,7 +153,7 @@ def write_404(site: Any, out_dir: Path, routes: list[Any]) -> None:
             return
     out_dir.joinpath("404.html").write_text(
         "<!doctype html><html><head><title>404</title></head>"
-        "<body><h1>404 — Not Found</h1><p><a href=\"/\">Home</a></p></body></html>\n",
+        '<body><h1>404 — Not Found</h1><p><a href="/">Home</a></p></body></html>\n',
         encoding="utf-8",
     )
 
@@ -210,7 +206,7 @@ def rss_feed(site: Any, *, title: str, description: str, path: str, items: list[
         f"<title>{_e(title)}</title>"
         f"<link>{_e(base)}</link>"
         f"<description>{_e(description)}</description>"
-        f"<atom:link href=\"{_ea(feed_url)}\" rel=\"self\" type=\"application/rss+xml\" xmlns:atom=\"http://www.w3.org/2005/Atom\"/>"
+        f'<atom:link href="{_ea(feed_url)}" rel="self" type="application/rss+xml" xmlns:atom="http://www.w3.org/2005/Atom"/>'
         + "\n".join(entries)
         + "</channel></rss>\n"
     )
@@ -291,9 +287,7 @@ def write_search_index(site: Any, out_dir: Path, routes: list[Any], rendered: di
     manifest: list[dict[str, Any]] = []
     for name, units in sorted(buckets.items()):
         slug = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-").lower() or "root"
-        (section_dir / f"{slug}.json").write_text(
-            search.serialize(search.build_index(units)), encoding="utf-8"
-        )
+        (section_dir / f"{slug}.json").write_text(search.serialize(search.build_index(units)), encoding="utf-8")
         manifest.append({"name": name, "file": f"{section_dir.name}/{slug}.json", "units": len(units)})
     out.write_text(
         search.serialize({"version": 3, "sections": manifest, "units": sum(m["units"] for m in manifest)}),

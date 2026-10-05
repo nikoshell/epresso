@@ -6,6 +6,7 @@ template render → write ``dist/``. Deterministic + incremental-aware.
 
 from __future__ import annotations
 
+import os
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -32,6 +33,49 @@ __all__ = ["Site", "BuildResult"]
 
 _log_render = get_logger("render")
 _log_content = get_logger("content")
+
+
+_FAILED = "<epresso:render-failed>"
+_WORKER: tuple[Any, list[Any]] | None = None  # (site, routes) shared with forked workers
+PARALLEL_MIN_ROUTES = 64  # below this, forking costs more than it saves
+
+
+def _build_jobs(config: Any, n: int) -> int:
+    """Worker processes for ``n`` routes: ``[build] jobs`` / ``$EPRESSO_JOBS``
+    (0 = one per CPU, max 8), serial for small builds or without ``fork``."""
+    import multiprocessing as mp
+
+    jobs = int(os.environ.get("EPRESSO_JOBS") or getattr(config.build, "jobs", 0) or 0)
+    if jobs <= 0:
+        jobs = min(os.cpu_count() or 1, 8)
+    if jobs <= 1 or n < PARALLEL_MIN_ROUTES or "fork" not in mp.get_all_start_methods():
+        return 1
+    return min(jobs, n // 16 or 1)
+
+
+def _render_chunk(indices: list[int]) -> dict[str, Any]:
+    """Worker: render the routes at ``indices`` and report what they registered."""
+    assert _WORKER is not None
+    site, todo = _WORKER
+    s = site.session
+    s.scoped_css, s.scripts, s.warnings = {}, {}, []
+    site.assets._assets, site.images._jobs = {}, {}
+    routes = []
+    for i in indices:
+        try:
+            rendered = site._render_one(todo[i])
+        except Exception:  # noqa: BLE001  — re-rendered in the parent for the real error
+            routes.append((i, _FAILED, None))
+            continue
+        routes.append((i, rendered, site.graph._edges.get(todo[i].path)))
+    return {
+        "routes": routes,
+        "css": s.scoped_css,
+        "js": s.scripts,
+        "warnings": s.warnings,
+        "assets": site.assets._assets,
+        "images": site.images._jobs,
+    }
 
 
 @dataclass
@@ -76,6 +120,10 @@ class Site:
         # each load for the same reason (``on_setup`` re-registers them).
         self._source_transforms: list[tuple[str, Any]] = []
         self._production = False  # True during production builds (hides drafts/scheduled)
+        self._published_cache: dict[str, tuple] = {}
+        # build(): cache the *pre-transform* page and run html transforms after,
+        # on fresh and reused output alike, so transforms don't defeat reuse.
+        self._defer_html_transforms = False
         self._loaded = False
         self._link_resolver = None  # lazily built from routes/content
         # Content dependency tracking + the incremental cache live in the build
@@ -94,7 +142,28 @@ class Site:
     def get_collection(self, name: str) -> list[Any]:
         self.graph.record_dependency(f"collection:{name}")
         entries = self.store.get_collection(name)
-        return [e for e in entries if self._is_published(e)]
+        # Every page asks for the same collection: filter once per entry set and
+        # publish mode, not once per page (it was O(pages × entries)).
+        key = (name, self._production, tuple(map(id, entries)))
+        hit = self._published_cache.get(name)
+        if hit is None or hit[0] != key:
+            hit = (key, [e for e in entries if self._is_published(e)])
+            self._published_cache[name] = hit
+        return list(hit[1])
+
+    def get_collection_index(self, name: str) -> list[Any]:
+        """Like :meth:`get_collection`, for nav/listings that read entry ids,
+        ``data`` and ``computed`` only — never ``body``/``rendered``. The page
+        then depends on that metadata alone, so editing another entry's body
+        doesn't re-render it (only a title/order/frontmatter change does)."""
+        self.graph.record_dependency(f"collection-index:{name}")
+        entries = self.store.get_collection(name)
+        key = (name, self._production, tuple(map(id, entries)))
+        hit = self._published_cache.get(name)
+        if hit is None or hit[0] != key:
+            hit = (key, [e for e in entries if self._is_published(e)])
+            self._published_cache[name] = hit
+        return list(hit[1])
 
     def get_entry(self, collection: str, entry_id: str) -> Any:
         self.graph.record_dependency(f"{collection}:{entry_id}")
@@ -259,17 +328,21 @@ class Site:
                     image_base = (entry.computed or {}).get("image_base") or None
                 # image_base is not part of the entry digest, so fold it into the
                 # cache key (identical bodies in different dirs render differently).
-                cache_key = f"{entry.digest}:{image_base or ''}" if entry.digest else ""
+                # Raw-HTML relative URLs resolve against the page's own URL dir,
+                # which (directory URLs) is one level below the file's dir.
+                page_base = None
+                if image_base and entry.file_path and entry.file_path.stem.lower() not in {"index", "readme"}:
+                    page_base = image_base.rstrip("/") + "/" + entry.file_path.stem + "/"
+                cache_key = f"{entry.digest}:{image_base or ''}:{page_base or ''}" if entry.digest else ""
                 hit = cached.get(cache_key) if cache_key else None
                 if hit is not None:
-                    entry.rendered = RenderedContent(
-                        html=hit.get("html", ""), metadata=hit.get("metadata", {})
-                    )
+                    entry.rendered = RenderedContent(html=hit.get("html", ""), metadata=hit.get("metadata", {}))
                     continue
                 entry.rendered = render_markdown(
                     entry.body or "",
                     self.config.markdown,
                     image_base=image_base,
+                    page_base=page_base,
                     component_names=component_names,
                     component_renderer=component_placeholder if component_names else None,
                     link_resolver=self.link_resolver(),
@@ -455,11 +528,115 @@ class Site:
         plugin's own code (not just content), any registered transform disables
         per-route output reuse (see ``build``) — content-body caching still holds.
         """
-        if not self._html_transforms:
+        if not self._html_transforms or self._defer_html_transforms:
             return html
-        ctx: dict[str, Any] = {"path": route.path, "params": route.params}
+        ctx: dict[str, Any] = {"path": route.path, "params": route.params, "data": route.data}
         for _name, fn in self._html_transforms:
             html = fn(html, ctx)
+        return html
+
+    def _carry_side_effects(self, *, reused: bool) -> None:
+        """Reused pages render nothing, so they register no scoped CSS, scripts,
+        ``asset()`` files or ``image()`` jobs: take the previous build's back in,
+        then save this build's. Pages are only reused when config + code are
+        unchanged, so the previous registrations are still valid."""
+        import json
+
+        path = self.config.cache_dir() / "side-effects.json"
+        s, a, im = self.session, self.assets, self.images
+        if reused and path.is_file():
+            try:
+                prev = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                prev = {}
+            for k, v in prev.get("css", {}).items():
+                s.scoped_css.setdefault(k, v)
+            for k, v in prev.get("js", {}).items():
+                s.scripts.setdefault(k, v)
+            for url, src in prev.get("assets", {}).items():
+                if Path(src).is_file():
+                    a._assets.setdefault(url, Path(src))
+            for rel, jobs in prev.get("images", {}).items():
+                im._jobs.setdefault(rel, set()).update((int(w), f) for w, f in jobs)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {
+                    "css": s.scoped_css,
+                    "js": s.scripts,
+                    "assets": {u: str(p) for u, p in a._assets.items()},
+                    "images": {r: sorted(j) for r, j in im._jobs.items()},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _render_one(self, route: Route) -> tuple[str, str] | None:
+        """Render a route for the build: html transforms run later, in order."""
+        self._defer_html_transforms = True
+        try:
+            return self.render_route(route)
+        finally:
+            self._defer_html_transforms = False
+
+    def _render_all(self, todo: list[Route]) -> list[tuple[str, str] | None]:
+        """Render ``todo``, split across forked worker processes when it pays off.
+
+        Rendering is pure Python (the GIL rules out threads), so workers are
+        processes forked *after* the site is loaded: they inherit the loaded
+        content, compiled templates and caches for free, render a slice of the
+        routes, and send back the HTML plus the side effects a render registers
+        (scoped CSS, scripts, ``asset()`` files, ``image()`` jobs, dependency
+        edges, warnings) — the same set :meth:`_carry_side_effects` keeps for
+        reused pages. Html transforms (plugins) stay in this process. A route a
+        worker fails on is rendered here again, so its error surfaces normally.
+        """
+        jobs = _build_jobs(self.config, len(todo))
+        if jobs <= 1:
+            return [self._render_one(r) for r in todo]
+        import multiprocessing as mp
+
+        global _WORKER
+        _WORKER = (self, todo)
+        chunks = [list(range(i, len(todo), jobs * 4)) for i in range(jobs * 4)]
+        out: list[tuple[str, str] | None] = [None] * len(todo)
+        failed: list[int] = []
+        try:
+            with mp.get_context("fork").Pool(jobs) as pool:
+                for part in pool.imap_unordered(_render_chunk, [c for c in chunks if c]):
+                    for i, rendered, edges in part["routes"]:
+                        if rendered is _FAILED:
+                            failed.append(i)
+                            continue
+                        out[i] = rendered
+                        if edges is not None:
+                            self.graph._edges[todo[i].path] = edges
+                    self._merge_side_effects(part)
+        finally:
+            _WORKER = None
+        for i in failed:  # re-render here: raises the real error
+            out[i] = self._render_one(todo[i])
+        return out
+
+    def _merge_side_effects(self, part: dict[str, Any]) -> None:
+        s = self.session
+        for k, v in part["css"].items():
+            s.scoped_css.setdefault(k, v)
+        for k, v in part["js"].items():
+            s.scripts.setdefault(k, v)
+        s.warnings.extend(w for w in part["warnings"] if w not in s.warnings)
+        for url, src in part["assets"].items():
+            self.assets._assets.setdefault(url, src)
+        for rel, jobs in part["images"].items():
+            self.images._jobs.setdefault(rel, set()).update(jobs)
+
+    def _finish_html(self, route: Route, html: str, *, minify: bool = True) -> str:
+        """Html transforms (+ optional minify) over a page's pre-transform HTML."""
+        html = self._apply_html_transforms(route, html)
+        if minify and self.config.build.compress_html:
+            from .minify import minify_html
+
+            html = minify_html(html)
         return html
 
     def _apply_base_prefix(self, out_dir: Path) -> None:
@@ -489,7 +666,7 @@ class Site:
                 if "EPRESSO_BASE" not in ns and "</head>" in ns:
                     ns = ns.replace(
                         "</head>",
-                        f'<script>window.EPRESSO_BASE={base_js!r};</script></head>',
+                        f"<script>window.EPRESSO_BASE={base_js!r};</script></head>",
                         1,
                     )
                 if ns != s:
@@ -500,7 +677,7 @@ class Site:
                 if ns != s:
                     f.write_text(ns, encoding="utf-8")
 
-    def build(self, *, clean: bool = True, progress: Any | None = None) -> BuildResult:
+    def build(self, *, clean: bool = True, progress: Any | None = None, keep_cache: bool = False) -> BuildResult:
         """Build the site. ``progress(i, total, path)`` is called per route during
         the render phase (used by the CLI to show a progress indicator)."""
         # `start` covers the load too, so result.duration is the whole build and the
@@ -513,7 +690,8 @@ class Site:
         # in non-production envs (development, preview, etc.).
         self._production = self.env_name in (None, "production")
         out_dir = self.config.dir_output()
-        self.graph.prepare(clean=clean)
+        # keep_cache: a fresh dist/ but reuse unchanged pages from .cache/
+        self.graph.prepare(clean=clean and not keep_cache)
         if clean and out_dir.exists():
             shutil.rmtree(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -530,9 +708,8 @@ class Site:
         rendered_pages: dict[str, str] = {}
         _t = time.monotonic()
         total_routes = len(routes)
+        todo: list[tuple[Route, str, bool]] = []  # routes to render: (route, out_rel, is_page)
         for _i, route in enumerate(routes, 1):
-            if progress is not None:
-                progress(_i, total_routes, route.path)
             _log_render.debug(f"render {route.path}")
             valid.add(route.path)
             out_rel = output_path_for(route.path)
@@ -541,28 +718,39 @@ class Site:
             cache_key = route.cache_key
 
             # 1) Reuse a cached output when data + content deps are unchanged.
-            #    A registered html transform may depend on plugin code, so once any
-            #    exists we re-render every route (content-body caching still works).
-            #    A source transform rewrites the template itself, so it gets the
-            #    same treatment.
-            if (
-                not self._html_transforms
-                and not self._source_transforms
-                and self.graph.can_skip(route.path, cache_key, out_rel)
-            ):
+            #    The cache holds HTML *before* html transforms (plugins), which
+            #    re-run below on every page, so their output is never stale. A
+            #    source transform rewrites the template itself, so it disables reuse.
+            if not self._source_transforms and self.graph.can_skip(route.path, cache_key, out_rel):
+                if progress is not None:
+                    progress(_i, total_routes, route.path)
+                cached = self.graph.reuse_output(route.path, out_rel)
                 dst = out_dir / out_rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_bytes(self.graph.reuse_output(route.path, out_rel))
+                if is_html:  # reused pages still feed the search index
+                    html = self._finish_html(route, cached.decode("utf-8"))
+                    rendered_pages[route.path] = html
+                    dst.write_text(html, encoding="utf-8")
+                else:
+                    dst.write_bytes(cached)
                 result.skipped += 1
                 (result.pages if is_page else result.endpoints).append(route.path)
                 continue
+            todo.append((route, out_rel, is_page))
 
-            # 2) Render, record content deps, write to dist + cache.
-            rendered = self.render_route(route)
+        # 2) Render (in parallel worker processes on large builds), then record
+        #    content deps and write to dist + cache in route order.
+        done = total_routes - len(todo)
+        for (route, out_rel, is_page), rendered in zip(todo, self._render_all([t[0] for t in todo]), strict=True):
+            done += 1
+            if progress is not None:
+                progress(done, total_routes, route.path)
             if rendered is None:
                 continue
             content, content_type = rendered
+            raw = content
             if content_type == "text/html":
+                content = self._finish_html(route, content, minify=False)
                 rendered_pages[route.path] = content
             # Combined scoped CSS + JS are written once for the whole site and
             # injected into every page after the loop (see _write_combined_bundles).
@@ -574,13 +762,14 @@ class Site:
             dst = out_dir / out_rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(content, encoding="utf-8")
-            self.graph.record_rendered(route.path, cache_key, out_rel, content)
+            self.graph.record_rendered(route.path, route.cache_key, out_rel, raw)
             (result.pages if is_page else result.endpoints).append(route.path)
 
         self.graph.finish(valid)
         result.perf["render"] = time.monotonic() - _t
 
         # assets + static passthrough
+        self._carry_side_effects(reused=result.skipped > 0)
         self.plugins.run_hook("on_assets", self)
         _t = time.monotonic()
         self.assets.build(out_dir)
@@ -625,10 +814,7 @@ class Site:
         routes = self.resolve_routes()
         for r in routes:
             self.render_route(r)
-        edges = {
-            path: sorted(self.graph.edges_for(path))
-            for path in sorted({r.path for r in routes})
-        }
+        edges = {path: sorted(self.graph.edges_for(path)) for path in sorted({r.path for r in routes})}
         return {"routes": [r.path for r in routes], "edges": edges}
 
     def graph_dot(self) -> str:

@@ -449,3 +449,15 @@ def test_removed_docs_section_is_a_clear_config_error(tmp_path):
     (tmp_path / "site.toml").write_text('[[docs]]\nsource = "docs"\n', encoding="utf-8")
     with pytest.raises(ConfigError, match="epresso_docs"):
         load_config(tmp_path)
+
+
+def test_env_disables_named_plugins(tmp_path, monkeypatch):
+    from epresso.config import load_config
+    from epresso.plugins import PluginManager
+
+    (tmp_path / "site.toml").write_text('plugins = ["epresso_umami", "epresso_pandoc"]\n', encoding="utf-8")
+    monkeypatch.setenv("EPRESSO_DISABLE_PLUGINS", "epresso_umami, nope")
+    pm = PluginManager()
+    pm.discover(tmp_path, load_config(tmp_path))
+    state = {p.name: p.enabled for p in pm.plugins}
+    assert state["epresso_umami"] is False and state["epresso_pandoc"] is True

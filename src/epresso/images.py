@@ -12,7 +12,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from .logger import get_logger
 from .pipeline import file_digest
+
+_log = get_logger("images")
 
 DEFAULT_WIDTHS = [400, 800, 1200]
 
@@ -80,7 +83,7 @@ class ImagePipeline:
                     subprocess.run(cmd, check=True, capture_output=True)
                     return png
                 except Exception as e:  # noqa: BLE001
-                    print(f"  [epresso] {cmd[0]} failed on {src.name}: {e}")
+                    _log.warn(f"{cmd[0]} failed on {src.name}: {e}")
                     return None
         return None
 
@@ -90,7 +93,7 @@ class ImagePipeline:
                 self._jobs.setdefault(name.lstrip("/"), set()).add((w, fmt))
 
     def _fallback(self, name: str, alt: str) -> str:
-        return f"<img src=\"/assets/{name.lstrip('/')}\" alt=\"{alt}\">"
+        return f'<img src="/assets/{name.lstrip("/")}" alt="{alt}">'
 
     def render(self, name: str, widths: list[int] | None = None, alt: str = "") -> str:
         """Return an <img> tag (WebP srcset) for a source image under assets/."""
@@ -104,16 +107,14 @@ class ImagePipeline:
         variants = sorted(widths, reverse=True)
         urls = [f"/images/{base}-{digest}-{w}.webp" for w in variants]
         srcset = ", ".join(f"{u} {w}w" for u, w in zip(urls, variants, strict=True))
-        return f"<img src=\"{urls[0]}\" srcset=\"{srcset}\" sizes=\"100vw\" alt=\"{alt}\">"
+        return f'<img src="{urls[0]}" srcset="{srcset}" sizes="100vw" alt="{alt}">'
 
-    def render_cls(
-        self, name: str, widths: list[int] | None, alt: str, cls: str, style: str = ""
-    ) -> str:
+    def render_cls(self, name: str, widths: list[int] | None, alt: str, cls: str, style: str = "") -> str:
         """Like :meth:`render` but with a custom CSS class (and optional inline style)."""
-        style_attr = f" style=\"{style}\"" if style else ""
+        style_attr = f' style="{style}"' if style else ""
         src = self.resolve_src(name)
         if src is None or not _has_pillow():
-            return f"<img class=\"{cls}\"{style_attr} src=\"/assets/{name.lstrip('/')}\" alt=\"{alt}\">"
+            return f'<img class="{cls}"{style_attr} src="/assets/{name.lstrip("/")}" alt="{alt}">'
         widths = [int(w) for w in (widths or DEFAULT_WIDTHS)]
         self._register(name, widths, ["webp"])
         base, _ext = os.path.splitext(name.lstrip("/"))
@@ -121,7 +122,7 @@ class ImagePipeline:
         variants = sorted(widths, reverse=True)
         urls = [f"/images/{base}-{digest}-{w}.webp" for w in variants]
         srcset = ", ".join(f"{u} {w}w" for u, w in zip(urls, variants, strict=True))
-        return f"<img class=\"{cls}\"{style_attr} src=\"{urls[0]}\" srcset=\"{srcset}\" sizes=\"100vw\" alt=\"{alt}\">"
+        return f'<img class="{cls}"{style_attr} src="{urls[0]}" srcset="{srcset}" sizes="100vw" alt="{alt}">'
 
     def picture(self, name: str, widths: list[int] | None = None, alt: str = "") -> str:
         """Return a <picture> with WebP sources + a JPEG fallback."""
@@ -134,17 +135,13 @@ class ImagePipeline:
         digest = file_digest(src, 10)
         variants = sorted(widths, reverse=True)
 
-        webp_srcset = ", ".join(
-            f"/images/{base}-{digest}-{w}.webp {w}w" for w in variants
-        )
-        jpeg_srcset = ", ".join(
-            f"/images/{base}-{digest}-{w}.jpg {w}w" for w in variants
-        )
+        webp_srcset = ", ".join(f"/images/{base}-{digest}-{w}.webp {w}w" for w in variants)
+        jpeg_srcset = ", ".join(f"/images/{base}-{digest}-{w}.jpg {w}w" for w in variants)
         jpeg_src = f"/images/{base}-{digest}-{variants[0]}.jpg"
         return (
             f"<picture>"
-            f'<source type=\"image/webp\" srcset=\"{webp_srcset}\" sizes=\"100vw\">'
-            f'<img src=\"{jpeg_src}\" srcset=\"{jpeg_srcset}\" sizes=\"100vw\" alt=\"{alt}\">'
+            f'<source type="image/webp" srcset="{webp_srcset}" sizes="100vw">'
+            f'<img src="{jpeg_src}" srcset="{jpeg_srcset}" sizes="100vw" alt="{alt}">'
             f"</picture>"
         )
 
@@ -168,11 +165,9 @@ class ImagePipeline:
             if all(o.exists() for o in outputs):
                 continue
             try:
-                raster = (
-                    self._rasterize_svg(src, tmp) if src.suffix.lower() == ".svg" else src
-                )
+                raster = self._rasterize_svg(src, tmp) if src.suffix.lower() == ".svg" else src
                 if raster is None:
-                    print(f"  [epresso] skipped image (cannot process): {rel}")
+                    _log.warn(f"skipped image (cannot process): {rel}")
                     continue
                 im = Image.open(raster)
                 for w, fmt in sorted(jobs):
@@ -188,4 +183,4 @@ class ImagePipeline:
                     out.parent.mkdir(parents=True, exist_ok=True)
                     resized.save(out, fmt.upper(), quality=82)
             except Exception as e:  # noqa: BLE001
-                print(f"  [epresso] image error on {rel}: {e}")
+                _log.warn(f"image error on {rel}: {e}")

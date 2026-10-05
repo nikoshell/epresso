@@ -13,6 +13,7 @@ Enable it and (optionally) list sources in ``site.toml``::
     prefix = "/plugins/a/"                # URL prefix (default "/")
     title = "Plugin A"                    # sidebar group label
     repo_url = ""                         # "view source" base override
+    nav = ["index.md", {"Guide" = ["guide/install.md"]}]  # nested; replaces dir grouping
 
 All sources merge into one ``docs`` collection (one sidebar, search and
 prev/next chain). With no ``sources`` it reads the site's own docs dir, as the
@@ -28,6 +29,7 @@ and serves its docs page route — the site's own pages and layouts are untouche
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +54,7 @@ class Doc(BaseModel):
 
 
 def _blob(repo: str, branch: str, path: str) -> str:
-    """GitHub-style "view source" base, or "" without a repo."""
+    """The "view source" base (``<repo>/blob/<branch>/<path>``), or "" without a repo."""
     if not repo:
         return ""
     return "/".join(p.strip("/") for p in (repo, "blob", branch or "main", path) if p.strip("/"))
@@ -109,6 +111,7 @@ def _mount(config: Any, spec: dict[str, Any]) -> DocsMount:
         title=str(spec.get("title", "")),
         repo_url=repo_url,
         docs_dir="" if sub == "." else sub,
+        nav=tuple(spec.get("nav") or ()),
     )
 
 
@@ -158,6 +161,11 @@ def before_load(caps) -> None:
     mounts = [_mount(config, s) for s in sources] if sources else [_default_mount(config)]
     from dataclasses import replace  # noqa: PLC0415
 
+    if "epresso_blog" in config.plugins and mounts:  # the blog plugin owns <blog_dir>/
+        blog_dir = str((config.plugin.get("epresso_blog") or {}).get("blog_dir", "blog")).strip("/")
+        if (mounts[0].base / blog_dir / "posts").is_dir():
+            mounts[0] = replace(mounts[0], exclude=(blog_dir,))
+
     base = str(opts.get("base", "")).strip("/")
     if base:
         mounts = [replace(m, prefix=_under(base, m.prefix)) for m in mounts]
@@ -168,20 +176,61 @@ def before_load(caps) -> None:
     # Publish each source's images/files so relative srcs in its Markdown resolve.
     published = []
     content_dir = config.dir_content().resolve()
+    prefixes = []
     for i, m in enumerate(mounts):
         if m.base.resolve().is_relative_to(content_dir):
             published.append(m)  # core already mirrors content/ images (public/content/…)
+            prefixes.append(_under(base, "content/" + m.base.resolve().relative_to(content_dir).as_posix()))
             continue
+        prefixes.append(_under(base, f"_docs-assets/{i}"))
         url = _under(base, f"_docs-assets/{i}")
-        caps.add_static(m.base, url)
+        caps.add_static(m.base, url, exclude=m.exclude)  # e.g. blog/: epresso_blog publishes it
         published.append(replace(m, asset_url=url))
     mounts = published
+    _PUBLISHED[:] = prefixes  # pruned of unreferenced files after the build
     _adopt_branding(config, mounts)
     caps.register_collection("docs", loader=DocsLoader(pattern=DOCS_GLOB, mounts=mounts), schema=Doc)
 
 
+_PUBLISHED: list[str] = []  # URL prefixes the docs sources' files are published under
+TEXT_OUTPUTS = {".html", ".css", ".js", ".json", ".xml", ".txt", ".webmanifest", ".svg"}
+
+
+def after_build(caps, result) -> None:
+    """Drop source files nothing links to: a docs source is published whole (its
+    images resolve wherever a page points), but only referenced files ship.
+    References are looked for in every built text file, so hand-written links,
+    srcsets, CSS ``url()`` and branding (logo/favicon/og:image) all count."""
+    from urllib.parse import unquote  # noqa: PLC0415
+
+    out = caps.config.dir_output()
+    roots = [(p, out / p.strip("/")) for p in _PUBLISHED if (out / p.strip("/")).is_dir()]
+    if not roots:
+        return
+    pattern = re.compile("(" + "|".join(re.escape(p) for p, _ in roots) + r")[^\s\"'()<>?#,]+")
+    import posixpath  # noqa: PLC0415
+
+    used: set[str] = set()
+    for f in out.rglob("*"):
+        if f.suffix.lower() in TEXT_OUTPUTS and f.is_file() and not any(f.is_relative_to(r) for _, r in roots):
+            text = f.read_text(encoding="utf-8", errors="ignore")
+            # "/x/a/../b.png" is how browsers see "/x/b.png": normalise like them
+            used.update(posixpath.normpath(unquote(m.group(0))) for m in pattern.finditer(text))
+    dropped = 0
+    for prefix, root in roots:
+        for f in root.rglob("*"):
+            if f.is_file() and prefix + f.relative_to(root).as_posix() not in used:
+                f.unlink()
+                dropped += 1
+        for d in sorted((p for p in root.rglob("*") if p.is_dir()), reverse=True):
+            if not any(d.iterdir()):
+                d.rmdir()
+    if dropped:
+        caps.logger.info(f"left out {dropped} unreferenced files from the docs sources")
+
+
 def epresso_docs() -> Plugin:
-    return Plugin(name="epresso_docs", hooks={"before_load": before_load})
+    return Plugin(name="epresso_docs", hooks={"before_load": before_load, "after_build": after_build})
 
 
 # Module-level instance so ``plugins = ["epresso_docs"]`` auto-discovers it.

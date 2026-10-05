@@ -1,0 +1,28 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    nav: dict = {}
+---
+
+<nav class="blog-archive" aria-label="Blog archive">
+    {% if props.nav.get("archive") %}
+        <h2>Archive</h2>
+        <ul>
+            {% for y in props.nav["archive"] %}<li><a href="{{ y.url }}">{{ y.name }}</a></li>{% endfor %}
+        </ul>
+    {% endif %}
+    {% if props.nav.get("categories") %}
+        <h2>Categories</h2>
+        <ul>
+            {% for c in props.nav["categories"] %}<li><a href="{{ c.url }}">{{ c.name }}</a></li>{% endfor %}
+        </ul>
+    {% endif %}
+</nav>
+
+<style>
+.blog-archive { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line, #d0d5dc); }
+.blog-archive h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+.blog-archive ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+</style>

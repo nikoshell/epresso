@@ -59,9 +59,7 @@ class Logger:
             # debug is gated by EPRESSO_DEBUG scopes, not the min level
             scopes = _debug_scopes()
             return bool(scopes) and (
-                "*" in scopes
-                or self.name in scopes
-                or any(self.name.startswith(s + ":") for s in scopes)
+                "*" in scopes or self.name in scopes or any(self.name.startswith(s + ":") for s in scopes)
             )
         return _LEVELS[level] >= self._level
 

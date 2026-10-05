@@ -44,12 +44,15 @@ def get_static_paths():
         key=lambda d: (d.computed or {}).get("order", 0),
     )
     by_id = {d.id: d for d in all_docs}
-    n = len(docs)
+    chain = [d for d in docs if not (d.computed or {}).get("hidden")]  # nav-unlisted: no prev/next
+    pos = {d.id: i for i, d in enumerate(chain)}
+    n = len(chain)
     routes = []
-    for i, d in enumerate(docs):
+    for d in docs:
         c = d.computed or {}
-        prev = docs[(i - 1) % n] if n > 1 else None
-        nxt = docs[(i + 1) % n] if n > 1 else None
+        j = pos.get(d.id)
+        prev = chain[(j - 1) % n] if j is not None and n > 1 else None
+        nxt = chain[(j + 1) % n] if j is not None and n > 1 else None
         # The page's own markdown, served at ``<page>.md`` so readers (and LLMs)
         # can take it away verbatim. Body-less hubs have none (no route, no menu).
         md_body = _markdown_body(d) if page_actions else ""

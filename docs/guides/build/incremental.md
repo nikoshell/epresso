@@ -32,3 +32,12 @@ always produces identical output — ideal for caching and reproducible deploys.
 ## `epresso clean`
 
 Removes `dist/` and the `.cache` build cache.
+
+## Parallel rendering
+
+Builds with 64 or more pages to render are split across worker processes, one per
+CPU (up to 8). Workers are forked after the site is loaded, so they share the
+loaded content and compiled templates; plugin html transforms still run in the
+main process, in page order, so the output is identical to a serial build. Set
+`[build] jobs = 1` (or `EPRESSO_JOBS=1`) to render serially, or a number to cap
+the workers. Platforms without `fork()` (Windows) always render serially.

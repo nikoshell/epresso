@@ -17,6 +17,7 @@ scoped to the component's rendered output.
 
 from __future__ import annotations
 
+import ast
 import contextvars
 import re
 from pathlib import Path
@@ -70,15 +71,76 @@ def _references(code: CodeType, names: set[str]) -> bool:
     return any(isinstance(c, CodeType) and _references(c, names) for c in code.co_consts)
 
 
+def _stores(stmt: ast.stmt) -> set[str]:
+    """Module-level names a top-level statement binds (not names local to a
+    nested function/class/lambda/comprehension)."""
+    out: set[str] = set()
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return {stmt.name}
+    if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+        return {(a.asname or a.name).split(".")[0] for a in stmt.names}
+
+    def walk(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                out.add(child.name)
+            elif isinstance(child, (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                continue
+            elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
+                out.add(child.id)
+            else:
+                walk(child)
+
+    walk(stmt)
+    return out
+
+
+def _split_frontmatter(source: str, filename: str) -> tuple[CodeType | None, CodeType | None]:
+    """Split frontmatter into (run-once, run-per-render) code.
+
+    Only imports, ``def`` and ``class`` statements can run once — never an
+    assignment, so a mutable value (a dict a render fills in) is still fresh on
+    every render. Even those run per render when they read ``site``/``props``
+    or a name a per-render statement bound before them, or rebind a name a
+    per-render statement uses (so ordering is preserved).
+    """
+    tree = ast.parse(source, filename)
+    dynamic = {"site", "props"}  # names whose value depends on the render
+    read_late: set[str] = set()  # names read by per-render statements
+    once: list[ast.stmt] = []
+    per: list[ast.stmt] = []
+    for stmt in tree.body:
+        code = compile(ast.Module([stmt], []), filename, "exec", dont_inherit=True)
+        stores = _stores(stmt)
+        hoistable = isinstance(stmt, (ast.Import, ast.ImportFrom, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        if not hoistable or _references(code, dynamic) or stores & (dynamic | read_late):
+            per.append(stmt)
+            dynamic |= stores
+            read_late |= _all_names(code)
+        else:
+            once.append(stmt)
+
+    def comp(body: list[ast.stmt]) -> CodeType | None:
+        return compile(ast.Module(body, []), filename, "exec", dont_inherit=True) if body else None
+
+    return comp(once), comp(per)
+
+
+def _all_names(code: CodeType) -> set[str]:
+    names = set(code.co_names)
+    for c in code.co_consts:
+        if isinstance(c, CodeType):
+            names |= _all_names(c)
+    return names
+
+
 # ---- author-scope tracking (an element is scoped to its author) ----------
 # An element's scope is the component whose template *authored* it, not the one
 # that renders it. A render-scope stack tracks the component currently emitting
 # markup; when a `{% component %}` block captures its caller body, that body is
 # tagged with the top-of-stack (author) scope before being handed to the child,
 # so a receiver never re-stamps caller-authored content.
-_AUTHOR_SCOPE: contextvars.ContextVar[list[str] | None] = contextvars.ContextVar(
-    "epresso_author_scope", default=None
-)
+_AUTHOR_SCOPE: contextvars.ContextVar[list[str] | None] = contextvars.ContextVar("epresso_author_scope", default=None)
 
 
 def _push_author(scope: str) -> None:
@@ -98,9 +160,6 @@ def _pop_author() -> None:
 def _current_author() -> str | None:
     cur = _AUTHOR_SCOPE.get()
     return cur[-1] if cur else None
-
-
-
 
 
 def _resolve_component(env: Any, name: str) -> Path | None:
@@ -261,9 +320,7 @@ def _find_fragment_close(text: str, start: int) -> tuple[int, int] | None:
 _TAG_OPEN = re.compile(r"<\s*([A-Za-z][-\w:]*)((?:\s[^>]*?)?)(/?)>", re.DOTALL)
 _TAG_CLOSE = re.compile(r"</\s*([A-Za-z][-\w:]*)\s*>")
 
-_VOID_TAGS = frozenset(
-    "area base br col embed hr img input link meta param source track wbr".split()
-)
+_VOID_TAGS = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 
 
 def _find_tag_close(text: str, tag: str, start: int) -> tuple[int, int] | None:
@@ -535,13 +592,26 @@ def _parse_component(path: Path, environment: Any, site: Any = None):
     # helpers) produces the same namespace on every render, so execute it once
     # here. Frontmatter that depends on the render re-executes below.
     static_ns: dict[str, Any] | None = None
-    if fm_code is not None and not _references(fm_code, {"site", "props"}):
-        static_ns = {k: v for k, v in environment.globals.items() if k not in ("site", "_render_session")}
-        static_ns["__name__"] = "_epresso_component"
+    base_ns: dict[str, Any] | None = None
+    if fm_code is not None:
+        ns = {k: v for k, v in environment.globals.items() if k not in ("site", "_render_session")}
+        ns["__name__"] = "_epresso_component"
+        if _references(fm_code, {"site", "props"}):
+            once, per_render = _split_frontmatter(frontmatter, str(path))
+        else:
+            once, per_render = fm_code, None
         try:
-            exec(fm_code, static_ns)
+            if once is not None:
+                exec(once, ns)
         except Exception as e:  # noqa: BLE001
             raise TemplateError(f"error in component {path.name!r} frontmatter: {e}") from e
+        if per_render is None:
+            static_ns = ns
+        else:
+            # Statements that don't (transitively) read site/props — imports, the
+            # `Props` model, pure helpers — ran once above; only the rest runs per
+            # render. Re-creating a pydantic model per render cost ~4 ms each.
+            base_ns, fm_code = ns, per_render
     parsed = (
         frontmatter,
         body,
@@ -553,6 +623,7 @@ def _parse_component(path: Path, environment: Any, site: Any = None):
         compiled_scoped,
         compiled_global,
         static_ns,
+        base_ns,
     )
     if len(cache) >= 500:
         cache.clear()
@@ -574,6 +645,7 @@ def _render_epresso_component(
         scoped_tmpl,
         global_tmpl,
         static_ns,
+        base_ns,
     ) = _parse_component(path, environment, site)
     # Frontmatter that never reads `site`/`props` already ran once in
     # `_parse_component`; anything else executes per render with `site` and the
@@ -583,7 +655,7 @@ def _render_epresso_component(
     if static_ns is not None:
         namespace = static_ns
     else:
-        namespace = {**environment.globals, "site": site, "props": dict(kwargs)}
+        namespace = {**(base_ns if base_ns is not None else environment.globals), "site": site, "props": dict(kwargs)}
         if fm_code is not None:
             try:
                 exec(fm_code, namespace)
@@ -624,27 +696,25 @@ def _render_epresso_component(
     # Expose frontmatter top-level names (helpers/constants/computed values) to
     # the template body, so e.g. a ``render_tree`` helper or a ``base`` value is
     # usable as ``{{ render_tree(content) }}`` / ``{{ base }}``.
-    for _k, _v in namespace.items():
-        if _k in ("Props", "site", "props") or _k.startswith("_"):
-            continue
+    for _k, _v in _exports(namespace, environment.globals, static=namespace is static_ns):
         ctx.setdefault(_k, _v)
     _push_author(scope)
     try:
         try:
-            html = compiled.render(**ctx)
+            html = _render_shared(compiled, ctx)
         except Exception as e:  # noqa: BLE001
             raise TemplateError(f"error rendering component {name!r}: {e}") from e
         # <Fragment>/<> group siblings without emitting a node.
         html = unwrap_fragments(html)
 
         if scoped_tmpl is not None:
-            rendered_css = scoped_tmpl.render(**ctx)
+            rendered_css = _render_shared(scoped_tmpl, ctx)
             session.add_scoped_css(scope, rendered_css)
             from .scoped import inject_scope_attr
 
             html = inject_scope_attr(html, scope)
         if global_tmpl is not None:
-            rendered = global_tmpl.render(**ctx)
+            rendered = _render_shared(global_tmpl, ctx)
             style = session.dedup_global_css(rendered)
             if style:
                 # Global CSS lands in the <head> for full-document components (layout
@@ -658,7 +728,80 @@ def _render_epresso_component(
             session.add_script(scripts)
     finally:
         _pop_author()
+    return _defer_nested(html, scoped=scoped_tmpl is not None)
+
+
+# A scoped component's output is final: every opening tag carries a scope, and
+# fragments are unwrapped. Nested inside another component it is swapped for a
+# short token, so each ancestor's scope/fragment/slot passes don't re-scan the
+# whole subtree (a docs page is ~6 levels deep). The outermost component puts
+# the real markup back. Not deferred: output whose root tag names a slot (the
+# parent's slot extraction needs it) and full documents (``</head>`` is looked
+# for by enclosing layouts).
+_DEFERRED: dict[str, str] = {}
+_DEFERRED_SEQ = [0]
+_TOKEN_RE = re.compile("\x02ep(\\d+)\x03")
+_ROOT_SLOT_RE = re.compile(r"\A\s*<[^>]*\sslot\s*=")
+
+
+def _defer_nested(html: str, *, scoped: bool) -> str:
+    if _current_author() is not None:  # still inside another component
+        # unscoped output takes its ancestors' scope, so it must stay visible
+        if not scoped or "</head>" in html or _ROOT_SLOT_RE.match(html):
+            return html
+        _DEFERRED_SEQ[0] += 1
+        token = f"\x02ep{_DEFERRED_SEQ[0]}\x03"
+        _DEFERRED[token] = html
+        return token
+    if "\x02ep" in html:
+        while "\x02ep" in html:  # tokens nest: expand until none are left
+            expanded = _TOKEN_RE.sub(lambda m: _DEFERRED.pop(m.group(0), m.group(0)), html)
+            if expanded == html:
+                break  # an unknown token (not ours): leave it
+            html = expanded
+        _DEFERRED.clear()
     return html
+
+
+_EXPORTS: dict[int, tuple[dict, list[tuple[str, Any]]]] = {}
+
+
+def _exports(namespace: dict[str, Any], env_globals: Any, *, static: bool) -> list[tuple[str, Any]]:
+    """Frontmatter names a component's template sees: everything but ``Props``,
+    ``site``/``props``, private names and unchanged environment globals (the
+    context already has those). A run-once namespace never changes, so its list
+    is computed once (it was ~40 dict operations on every one of 60k renders)."""
+    if static:
+        hit = _EXPORTS.get(id(namespace))
+        if hit is not None and hit[0] is namespace:
+            return hit[1]
+    missing = object()
+    out = [
+        (k, v)
+        for k, v in namespace.items()
+        if k not in ("Props", "site", "props") and not k.startswith("_") and env_globals.get(k, missing) is not v
+    ]
+    if static:
+        if len(_EXPORTS) >= 1000:
+            _EXPORTS.clear()
+        _EXPORTS[id(namespace)] = (namespace, out)
+    return out
+
+
+def _render_shared(tmpl: Any, ctx: dict[str, Any]) -> str:
+    """``tmpl.render(**ctx)`` without Jinja merging the globals into a new dict.
+
+    ``ctx`` already carries the environment globals, and ``from_string``
+    templates have no globals of their own, so the context can share ``ctx``
+    as-is. ``Template.render`` would copy a ``ChainMap`` of the globals on every
+    call — a Python-level lookup per global, for every component render.
+    """
+    if tmpl.globals.maps[0]:  # template-specific globals: let Jinja merge them
+        return tmpl.render(**ctx)
+    try:
+        return tmpl.environment.concat(tmpl.root_render_func(tmpl.new_context(ctx, shared=True)))
+    except Exception:  # noqa: BLE001
+        return tmpl.environment.handle_exception()
 
 
 def _render_component(environment: Any, name: str, content: str, kwargs: dict[str, Any]) -> str:

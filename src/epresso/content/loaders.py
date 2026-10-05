@@ -39,7 +39,7 @@ def _expand_braces(pattern: str) -> list[str]:
     m = re.search(r"\{([^}]*)\}", pattern)
     if not m:
         return [pattern]
-    prefix, suffix = pattern[: m.start()], pattern[m.end():]
+    prefix, suffix = pattern[: m.start()], pattern[m.end() :]
     out: list[str] = []
     for alt in m.group(1).split(","):
         out.extend(_expand_braces(prefix + alt + suffix))

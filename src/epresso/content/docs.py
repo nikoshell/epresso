@@ -31,9 +31,7 @@ def _glob(base: Path, pattern: str) -> list[Path]:
     shown in dev/preview but excluded from production builds."""
     m = re.match(r"\*\*/\*\.\{([^}]+)\}$", pattern)
     if m:
-        return sorted(
-            p for ext in m.group(1).split(",") for p in base.rglob("*." + ext.strip())
-        )
+        return sorted(p for ext in m.group(1).split(",") for p in base.rglob("*." + ext.strip()))
     return sorted(base.glob(pattern))
 
 
@@ -78,9 +76,7 @@ def _read_docs(base: Path, pattern: str, docs_dir: str) -> dict[str, dict]:
         is_hub = stem.lower() in {"readme", "index"}
         doc_id = "/".join(parts) if is_hub else rel.with_suffix("").as_posix()
         name = (
-            (parts[-1] if parts else "Overview").replace("-", " ").title()
-            if is_hub
-            else stem.replace("-", " ").title()
+            (parts[-1] if parts else "Overview").replace("-", " ").title() if is_hub else stem.replace("-", " ").title()
         )
         body_stripped = strip_first_h1(body)
         has_page = _has_content(body_stripped)
@@ -203,6 +199,12 @@ class DocsMount:
     repo_url: str = ""
     docs_dir: str = "docs"
     asset_url: str = ""  # URL where the mount's non-Markdown files are published
+    # Nested ``nav`` (``"a.md"``, ``{"Title" = "a.md"}``, ``{"Section" = [...]}``,
+    # ``{"Title" = "https://..."}``). Set: it alone orders/groups the sidebar.
+    nav: tuple = ()
+    # Dirs (relative to ``base``) another plugin owns, e.g. epresso_blog's
+    # ``blog/``: not read as docs; ``nav`` entries pointing there are dropped.
+    exclude: tuple = ()
 
 
 def _prefix_parts(prefix: str) -> list[str]:
@@ -218,6 +220,8 @@ def _read_mounts(mounts: list[DocsMount], pattern: str) -> dict[str, dict]:
             continue
         pre = _prefix_parts(m.prefix)
         for d in _read_docs(m.base, pattern, m.docs_dir).values():
+            if any(d["rel"] == x or d["rel"].startswith(x.rstrip("/") + "/") for x in m.exclude):
+                continue
             d["id"] = "/".join([*pre, d["id"]]) if d["id"] else "/".join(pre)
             d["group_path"] = [*pre, *d["group_path"]]
             d["source_url"] = f"{m.repo_url.rstrip('/')}/{d['rel']}" if m.repo_url else ""
@@ -231,15 +235,110 @@ def _read_mounts(mounts: list[DocsMount], pattern: str) -> dict[str, dict]:
                     " (give one source a different `prefix`)"
                 )
             docs[d["id"]] = d
+        if m.nav:
+            _apply_nav(docs, m, pre)
         hub = "/".join(pre)
         if pre and hub not in docs:
             docs[hub] = {
-                "id": hub, "file": None, "title": m.title or pre[-1].replace("-", " ").title(),
-                "description": "", "draft": False, "private": False, "order": DEFAULT_ORDER,
-                "source": "", "rel": "", "source_url": "", "mount_title": m.title,
-                "group_path": pre, "is_hub": True, "has_page": False, "body": "",
+                "id": hub,
+                "file": None,
+                "title": m.title or pre[-1].replace("-", " ").title(),
+                "description": "",
+                "draft": False,
+                "private": False,
+                "order": DEFAULT_ORDER,
+                "source": "",
+                "rel": "",
+                "source_url": "",
+                "mount_title": m.title,
+                "group_path": pre,
+                "is_hub": True,
+                "has_page": False,
+                "body": "",
             }
     return docs
+
+
+def _slug(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "section"
+
+
+def _apply_nav(docs: dict[str, dict], m: DocsMount, pre: list[str]) -> None:
+    """Order/group one mount's docs by its ``nav``: listed pages take the nav's
+    position, title and section; sections become label-only hubs; URL entries
+    become sidebar links; unlisted pages are still built but ``hidden``."""
+    by_rel = {d["rel"]: d for d in docs.values() if d.get("rel") and d["file"] and d["group_path"][: len(pre)] == pre}
+    mine = set(id(d) for d in by_rel.values())
+    seen: set[int] = set()
+    counter = [0]
+
+    def add(item: object, path: list[str]) -> None:
+        title, target = (None, item) if isinstance(item, str) else next(iter(dict(item).items()))  # type: ignore[arg-type]
+        n = counter[0] = counter[0] + 1
+        if isinstance(target, list):  # a section
+            slug = [*path, _slug(str(title))]
+            hid = "/".join(slug)
+            if hid in docs:
+                hid = "~nav/" + hid
+            docs[hid] = {
+                "id": hid,
+                "file": None,
+                "title": str(title),
+                "description": "",
+                "draft": False,
+                "private": False,
+                "order": n,
+                "source": "",
+                "rel": "",
+                "source_url": "",
+                "mount_title": m.title,
+                "group_path": slug,
+                "is_hub": True,
+                "has_page": False,
+                "body": "",
+            }
+            for child in target:
+                add(child, slug)
+            return
+        target = str(target)
+        if "://" in target or target.startswith(("/", "mailto:")):  # an external link
+            lid = f"~link/{'/'.join(pre)}/{n}"
+            docs[lid] = {
+                "id": lid,
+                "file": None,
+                "title": str(title or target),
+                "description": "",
+                "draft": False,
+                "private": False,
+                "order": n,
+                "source": "",
+                "rel": "",
+                "source_url": "",
+                "link": target,
+                "mount_title": m.title,
+                "group_path": path,
+                "is_hub": False,
+                "has_page": False,
+                "body": "",
+            }
+            return
+        d = by_rel.get(target.lstrip("./"))
+        if d is None and any(target.lstrip("./").startswith(x.rstrip("/") + "/") for x in m.exclude):
+            return  # owned by another plugin (it adds its own sidebar entries)
+        if d is None:
+            raise ContentError(f"nav entry {target!r} is not a page in {m.base}")
+        seen.add(id(d))
+        d["order"], d["group_path"] = n, path
+        if title:
+            d["title"] = str(title)
+        if d["id"] != "/".join(pre):  # the source's landing page stays its hub
+            d["is_hub"] = False
+
+    for item in m.nav:
+        add(item, list(pre))
+    for d in by_rel.values():
+        if id(d) in mine and id(d) not in seen and d["id"] != "/".join(pre):
+            d["hidden"], d["order"] = True, DEFAULT_ORDER * 10
 
 
 class DocsLoader(LoaderObject):
@@ -278,7 +377,7 @@ class DocsLoader(LoaderObject):
         for d in ordered:  # a titled non-root source names its own sidebar group
             if d["mount_title"] and d["group_path"]:
                 d["group"] = d["mount_title"]
-        chain = [d for d in ordered if d["id"] != "" and d.get("has_page", True)]
+        chain = [d for d in ordered if d["id"] != "" and d.get("has_page", True) and not d.get("hidden")]
         n = len(chain)
         index = {d["id"]: i for i, d in enumerate(chain)}
         for doc in ordered:
@@ -290,7 +389,7 @@ class DocsLoader(LoaderObject):
             }
             data = collection.schema.model_validate(authored) if collection.schema else authored
             prev = nxt = None
-            if doc["id"] != "" and doc.get("has_page", True) and n > 1:
+            if doc["id"] in index and n > 1:
                 i = index[doc["id"]]
                 prev = chain[i - 1]
                 nxt = chain[(i + 1) % n]
@@ -303,6 +402,8 @@ class DocsLoader(LoaderObject):
                 "source": doc["source"],
                 "source_url": doc["source_url"],
                 "image_base": doc.get("image_base", ""),
+                "hidden": doc.get("hidden", False),
+                "link": doc.get("link", ""),
                 "prev": {"url": f"/{prev['id']}/", "title": prev["title"]} if prev else None,
                 "next": {"url": f"/{nxt['id']}/", "title": nxt["title"]} if nxt else None,
             }

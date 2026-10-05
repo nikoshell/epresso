@@ -571,8 +571,7 @@ def _page_panel(site, path: str) -> str:
     if collections:
         parts.append("<h4>Collections (read in full)</h4>")
         lis = "".join(
-            f'<li><button type="button" class="tb-pcontent" data-c="{h(c)}">{h(c)}</button></li>'
-            for c in collections
+            f'<li><button type="button" class="tb-pcontent" data-c="{h(c)}">{h(c)}</button></li>' for c in collections
         )
         parts.append(f"<ul>{lis}</ul>")
     for col in sorted(entries):
@@ -582,8 +581,7 @@ def _page_panel(site, path: str) -> str:
             for i in ids
         )
         parts.append(
-            f'<details class="tb-coll"><summary>{h(col)} <span>({len(ids)})</span></summary>'
-            f"<ul>{lis}</ul></details>"
+            f'<details class="tb-coll"><summary>{h(col)} <span>({len(ids)})</span></summary><ul>{lis}</ul></details>'
         )
     return "".join(parts)
 
@@ -597,10 +595,16 @@ def _toolbar_html(site, path: str, *, live: bool = True) -> str:
 
     route = _find_route(site, path)
     entry = getattr(route, "data", None)
-    src = (getattr(entry, "file_path", None) or (route.source if route is not None else None))
-    editor = f'<button type="button" class="tb-btn tb-icon tb-editor" data-file="{str(src)}" title="Open source in editor" aria-label="Open source in editor"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445a6.03 6.03 0 0 1-1.68.441l-1.026.146a.75.75 0 0 1-.863-.863l.146-1.026c.055-.34.207-.677.441-1.68a1.75 1.75 0 0 1 .445-.755l8.61-8.61Z"/></svg></button>' if src else ""
+    src = getattr(entry, "file_path", None) or (route.source if route is not None else None)
+    editor = (
+        f'<button type="button" class="tb-btn tb-icon tb-editor" data-file="{str(src)}" title="Open source in editor" aria-label="Open source in editor"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445a6.03 6.03 0 0 1-1.68.441l-1.026.146a.75.75 0 0 1-.863-.863l.146-1.026c.055-.34.207-.677.441-1.68a1.75 1.75 0 0 1 .445-.755l8.61-8.61Z"/></svg></button>'
+        if src
+        else ""
+    )
 
-    routes = sorted(r.path for r in site.resolve_routes() if r.content_type == "text/html" and not r.redirect_to)[:_PANEL_ROUTES]
+    routes = sorted(r.path for r in site.resolve_routes() if r.content_type == "text/html" and not r.redirect_to)[
+        :_PANEL_ROUTES
+    ]
     rows = "".join(f'<li><a href="{h(r)}" title="{h(r)}">{h(r)}</a></li>' for r in routes) or "<li><em>none</em></li>"
 
     links = ""
@@ -746,7 +750,6 @@ def _page_status(route) -> dict:
     return {"label": "", "cls": ""}
 
 
-
 def _env_info(site) -> tuple[str, str]:
     """Return ``(name, dot_class)`` for the active build environment."""
     env = (getattr(site, "env_name", None) or "development").lower()
@@ -766,7 +769,7 @@ def _env_override(site) -> str:
     color = {"development": "#a78bfa", "preview": "#ff922b"}.get(env)
     if not color:
         return ""
-    return f'<style data-epresso-env-dot>:root{{--epresso-env-dot:{color}}}</style>'
+    return f"<style data-epresso-env-dot>:root{{--epresso-env-dot:{color}}}</style>"
 
 
 def _status_html(site, path: str) -> str:
@@ -775,6 +778,7 @@ def _status_html(site, path: str) -> str:
     if not status["label"]:
         return ""
     return f'<div id="__epresso_tb_status" class="tb-status {status["cls"]}">this page is {status["label"]}</div>'
+
 
 def inject(html: str, site, path: str, *, live: bool = True) -> str:
     """Inject the dev toolbar into a rendered HTML page (no-op otherwise).

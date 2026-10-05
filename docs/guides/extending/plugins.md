@@ -46,9 +46,12 @@ class Greeter(Plugin):
 | `add_filter(name, fn)`    | `on_setup`    | register a Jinja template filter                    |
 | `register_collection(...)`| `before_load` | add a content collection (via a loader) to the store |
 | `add_markdown_extension(spec)` | `before_load` | register a Markdown extension (idempotent)      |
+| `add_markdown_it_plugin(fn)` | any | apply a markdown-it-py plugin `fn(md)` (e.g. from `mdit_py_plugins`) to every Markdown renderer |
+| `add_markdown_source_transform(fn)` | any | rewrite Markdown source before rendering (`str -> str`) |
+| `add_markdown_render_transform(fn)` | any | `fn(md, src, depth) -> str` — for syntax that renders inner Markdown (tabs) |
 | `add_layer(root)`         | `before_load` | add a component/layout/asset root after the site's own |
 | `add_route(rel, file)`    | `before_load` | serve `file` as if it were `pages/<rel>` (e.g. `"[...slug].ep"`) |
-| `add_static(dir, prefix)` | `before_load` | publish `dir`'s non-Markdown files verbatim under `prefix` |
+| `add_static(dir, prefix, exclude=())` | `before_load` | publish `dir`'s non-Markdown files verbatim under `prefix`, minus the subdirs in `exclude` |
 | `transform_html(fn)`      | any           | rewrite every rendered HTML page: `fn(html, ctx) -> html` |
 | `inject_head(fragment)`   | any           | insert a fragment into `<head>` of every page      |
 
@@ -99,7 +102,10 @@ exactly like a `content.config.py` collection.
 ## Transforming rendered output
 
 `transform_html(fn)` runs a pure function over each rendered HTML route. `ctx`
-carries `{"path", "params"}` for the route:
+carries `{"path", "params", "data"}` for the route (`data` is the route's
+content entry, if any). The page cache stores HTML *before* transforms run, and
+transforms re-run on reused pages too, so a transform never sees or leaves stale
+output and doesn't turn incremental builds off:
 
 ```python
 def watermark(text="Made by epresso"):
@@ -150,6 +156,23 @@ them).
 The lifecycle hooks, in order: `before_load`, `on_setup`, `after_load`,
 `before_build`, `after_build(caps, result)`, `on_assets`.
 
+## Bundled plugins
+
+These ship with epresso; list them in `plugins = [...]` (the docs theme enables
+the first seven). `EPRESSO_DISABLE_PLUGINS=a,b` turns named plugins off for one
+build without editing `site.toml`.
+
+| Plugin | What it does | Guide |
+|---|---|---|
+| `epresso_docs` | the `docs` collection from one or many Markdown sources | [below](#docs-from-several-sources-epresso_docs) |
+| `epresso_blog` | blog: posts, paginated index, archive, categories, RSS (MkDocs-compatible) | [Blog](/guides/content/blog/) |
+| `epresso_mkdocs` | MkDocs/Material Markdown syntax: admonitions, tabs, attr_list, snippets, … (`epresso_mkdocs_tabs` is an alias) | [Migrate from MkDocs](/guides/themes/migrate-from-mkdocs/) |
+| `epresso_social` | `og:image` social cards | [Social cards](/guides/styling/social-cards/) |
+| `epresso_optimize` | responsive WebP `srcset` for content images | [Images](/guides/styling/images/) |
+| `epresso_pandoc` | Pandoc fenced-code / image attributes | — |
+| `epresso_umami` | Umami analytics snippet (`UMAMI_WEBSITE_ID`) | — |
+| `epresso_page_feedback` | "Was this page helpful?" widget on docs pages | — |
+
 ## Docs from several sources: `epresso_docs`
 
 The bundled `epresso_docs` plugin owns a `docs` collection built from one or
@@ -194,6 +217,11 @@ Behaviour worth knowing:
   `logo.svg`, `favicon.ico` or `og-image.png` at a source's root brands the docs
   pages, unless `[theme] logo` / `favicon` / `og_image` is set. Under `base` the
   host's own favicon and pages are untouched.
+
+Every source's files (images, downloads) are published, then after the build
+only the files some built page, stylesheet or script references are kept.
+Relative URLs resolve like MkDocs: Markdown `![]()`/`[]()` against the source
+file, raw HTML `<img src>` against the page's own URL.
 
 ## Bundled example plugins
 

@@ -1,6 +1,6 @@
 [project]
 name = "epresso"
-version = "0.6.1"
+version = "0.7.0"
 description = "epresso — a modern, Python-first static site generator. Routes-as-code, content collections, deterministic + incremental builds."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -9,6 +9,7 @@ dependencies = [
     "typer>=0.12",
     "jinja2>=3.1",
     "markdown-it-py>=3.0",
+    "mdit-py-plugins>=0.4",
     "pydantic>=2.7",
     "PyYAML>=6.0",
     "pygments>=2.17",
@@ -57,7 +58,7 @@ packages = ["src/epresso"]
 "themes/docs/site.preview.toml" = "epresso/_themes/docs/site.preview.toml"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/epresso", "plugins/*.py", "themes/docs"]
+include = ["src/epresso", "plugins", "themes/docs"]
 exclude = ["themes/docs/dist", "themes/docs/.cache", "__pycache__"]
 
 [tool.pytest.ini_options]

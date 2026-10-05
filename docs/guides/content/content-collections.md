@@ -66,6 +66,12 @@ The curated globals mirror the store:
 {% endfor %}
 ```
 
+`get_collection_index(name)` returns the same entries for navigation and
+listings that read only `id`, `data` and `computed` — never a body. A page that
+uses it is re-rendered when an entry's title/frontmatter/order changes, not when
+some other entry's body does (the docs theme's sidebar uses it, so editing one
+page rebuilds one page).
+
 `get_entry(collection, id)` fetches a single entry. These helpers also **record
 the dependency edge** for incremental builds — a change to an entry re-renders
 only the pages that consume it.

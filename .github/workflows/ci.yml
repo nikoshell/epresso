@@ -29,9 +29,11 @@ jobs:
 
       - name: Lint (Ruff)
         run: uv run ruff check .
+      - name: Format check
+        run: uv run ruff format --check src plugins
 
       - name: Type check (Pyright)
-        run: uv run pyright src/epresso
+        run: uv run pyright src/epresso plugins
 
       - name: Test (pytest + coverage)
         run: uv run pytest --cov=epresso --cov-report=term-missing -q
@@ -52,7 +54,7 @@ jobs:
           uv pip install --python /tmp/epresso-pkg/bin/python /tmp/epresso-dist/*.whl
           rm -rf /tmp/epresso-md && mkdir -p /tmp/epresso-md/docs && cd /tmp/epresso-md
           printf '# Hello\n\nFrom a bare dir.\n' > docs/index.md
-          /tmp/epresso-pkg/bin/epresso docs --out /tmp/epresso-md/out
+          /tmp/epresso-pkg/bin/epresso docs . --out /tmp/epresso-md/out
           grep -q "From a bare dir" out/index.html && echo "installed epresso docs OK"
 
   perf:

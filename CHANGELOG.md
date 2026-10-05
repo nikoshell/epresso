@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.7.0
+
+### Added
+- **MkDocs migration**: `epresso docs .` reads `mkdocs.yml` live; `epresso import mkdocs`
+  writes a `docs.toml` (nav, redirects, extra CSS/JS, blog options; unsupported keys warn).
+- **`epresso_mkdocs`** plugin: admonitions, collapsible blocks, content tabs, nested fences,
+  attr_list, md_in_html, snippets, definition lists, footnotes, abbreviations, task lists,
+  mark/ins/sub/sup, keys. `epresso_mkdocs_tabs` is now an alias.
+- **`epresso_blog`** plugin: posts, paginated index, yearly archive, categories, authors,
+  RSS, MkDocs-compatible URLs; "Blog" section in the docs sidebar.
+- **`epresso_social`** plugin: `og:image` social cards per section, page or collection.
+- **`epresso_optimize`** plugin: responsive WebP `srcset`, lazy loading and intrinsic size
+  for content images.
+- `docs.toml`: per-source `nav`, `redirects`, `extra_css`, `extra_javascript`, `[blog]`;
+  unknown keys are an error.
+- Zero-config `epresso docs <dir>`: `README.md` homepage + `docs/` pages, placeholder
+  homepage when `README.md` is missing.
+- **Parallel rendering** across CPU cores (`[build] jobs`, `EPRESSO_JOBS`).
+- `site.get_collection_index()` for nav/listings that don't depend on page bodies.
+- `EPRESSO_DISABLE_PLUGINS=a,b`; plugin capabilities `add_markdown_it_plugin`,
+  `add_static(exclude=...)`; `transform_html` ctx gets `data`.
+
+### Changed
+- Plain `epresso docs` always shows epresso's own documentation; use `epresso docs .` for
+  the current project.
+- Only docs-source files a built page references are published.
+- Raw-HTML relative URLs resolve against the page URL, Markdown URLs against the source
+  file; relative links to files (pdf, zip, …) are rewritten too.
+- HTML-transform plugins no longer disable incremental page reuse.
+- Much faster cold and warm builds (1,000 pages: ~22s → ~9s cold, ~23s → ~5s warm).
+
+### Fixed
+- Page cache now invalidates when epresso itself changes.
+- Reused pages were missing from the search index.
+- Blog post images were published twice.
+
 ## 0.6.1
 
 ### Fixed

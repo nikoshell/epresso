@@ -27,9 +27,12 @@ Markdown as its docs collection, and serves the result on
 `http://127.0.0.1:4321`. The sidebar tree, search index, and on-page table of
 contents are all built from the Markdown itself.
 
-For a git checkout, epresso copies the markdown under the docs directory (default
-`docs/`, overridable with `EPRESSO_DOCS_DIR` or `REPO_DOCS`) plus a top-level
-README, and skips build junk. A bare Markdown directory is copied whole.
+Every directory follows the same zero-config rule: the top-level `README.md` is
+the homepage, and the Markdown under the docs directory (default `docs/`,
+overridable with `EPRESSO_DOCS_DIR` or `REPO_DOCS`) are the pages. Without
+`docs/` epresso warns and builds just the homepage; without `README.md` it shows
+a placeholder homepage that explains what to create. Use `epresso docs .` for the
+current directory — plain `epresso docs` shows epresso's own documentation.
 
 ## The link back to the repository
 

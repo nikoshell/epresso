@@ -86,7 +86,7 @@ class DevServer:
                     if path == search_path:
                         return FileResponse(idx)
                     shard_dir = (idx.parent / idx.stem).resolve()
-                    shard = (shard_dir / path[len(shard_prefix):]).resolve()
+                    shard = (shard_dir / path[len(shard_prefix) :]).resolve()
                     if shard.is_file() and shard.parent == shard_dir:
                         return FileResponse(shard)
             not_found = self.site.render_at("/404/") or self.site.render_at("/404.html")
@@ -190,11 +190,7 @@ class DevServer:
         # root at build time; serve them at the root URL in dev too.
         assets_root = self.site.config.dir_assets()
         top = (assets_root / rel).resolve()
-        if (
-            top.is_file()
-            and assets_root.resolve() in top.parents
-            and top.parent == assets_root.resolve()
-        ):
+        if top.is_file() and assets_root.resolve() in top.parents and top.parent == assets_root.resolve():
             return FileResponse(top)
         # assets/ + styles/ files are served under /assets/<file> (strip the prefix)
         rel2 = rel[len("assets/") :] if rel.startswith("assets/") else rel
@@ -218,10 +214,13 @@ class DevServer:
                         )
                 return FileResponse(ass)
         # caps.add_static trees (e.g. epresso_docs source images) under their prefix
-        for src_dir, prefix in getattr(self.site.assets, "extra_static", []):
+        for src_dir, prefix, exclude in getattr(self.site.assets, "extra_static", []):
             pre = prefix.strip("/") + "/"
             if rel.startswith(pre):
-                f = (src_dir / rel[len(pre):]).resolve()
+                sub = rel[len(pre) :]
+                if any(sub == x.strip("/") or sub.startswith(x.strip("/") + "/") for x in exclude):
+                    continue
+                f = (src_dir / sub).resolve()
                 if f.is_file() and src_dir.resolve() in f.parents:
                     return FileResponse(f)
         # Fall back to the bundled default favicon so /favicon.ico never 404s.
@@ -316,10 +315,7 @@ class DevServer:
             threading.Thread(target=_produce, daemon=True, name="epresso-file-watch").start()
             while True:
                 changes = await events_q.get()
-                relevant = any(
-                    not any(seg in _IGNORED_DIRS for seg in Path(path).parts)
-                    for _change, path in changes
-                )
+                relevant = any(not any(seg in _IGNORED_DIRS for seg in Path(path).parts) for _change, path in changes)
                 if not relevant:
                     continue
                 try:

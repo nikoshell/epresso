@@ -1,6 +1,6 @@
 """Markdown link resolution — map link targets to site URLs.
 
-Supports GitHub/wiki-style link syntax:
+Supports wiki-style link syntax:
 
 * ``[Label](Page)`` / ``[Label](Page.md)`` — relative links resolved to a URL
 * ``[Label](/path)``                       — absolute paths (passed through)

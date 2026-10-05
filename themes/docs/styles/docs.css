@@ -94,7 +94,7 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
-/* ── Fonts · self-hosted (no Google CDN, no swap on load) ── */
+/* ── Fonts · self-hosted (no third-party CDN, no swap on load) ── */
 @font-face {
   font-family: 'IBM Plex Mono';
   font-style: normal;
@@ -298,3 +298,47 @@ button:not(:disabled):active,
     padding: 0 !important;
   }
 }
+
+/* ── Imported docs content (epresso_mkdocs) ─────────────────────────────────
+   The plugin emits the class names imported docs already style, so their
+   `extra_css` keeps applying on top of these. */
+.doc :is(.admonition, details) {
+  --c: light-dark(#2f6fde, #6ea1ff);
+  margin: var(--space-md) 0; padding: 0 var(--space-md);
+  border: 1px solid var(--line); border-inline-start: 3px solid var(--c);
+  border-radius: var(--radius-sm); background: var(--surface);
+}
+.doc :is(.admonition-title, details > summary) {
+  margin: 0 calc(-1 * var(--space-md)); padding: var(--space-sm) var(--space-md);
+  font-weight: 600; color: var(--c);
+  background: color-mix(in srgb, var(--c) 8%, transparent);
+}
+.doc details > summary { cursor: pointer; }
+.doc details:not([open]) > summary { margin-bottom: 0; }
+.doc :is(.admonition, details) > :last-child:not(summary) { margin-bottom: var(--space-md); }
+.doc :is(.admonition, details) > :is(.admonition-title, summary) + * { margin-top: var(--space-sm); }
+.doc :is(.admonition, details):is(.abstract, .summary, .tldr) { --c: light-dark(#0b8fa8, #4cc9e0); }
+.doc :is(.admonition, details):is(.info, .todo) { --c: light-dark(#0b7fc0, #5ab8ef); }
+.doc :is(.admonition, details):is(.tip, .hint, .important, .success, .check, .done) { --c: var(--success); }
+.doc :is(.admonition, details):is(.question, .help, .faq) { --c: light-dark(#5a8a00, #a3d65a); }
+.doc :is(.admonition, details):is(.warning, .caution, .attention) { --c: var(--warning); }
+.doc :is(.admonition, details):is(.failure, .fail, .missing, .danger, .error, .bug) { --c: var(--error); }
+.doc :is(.admonition, details):is(.example) { --c: light-dark(#6d4ad8, #a78bfa); }
+.doc :is(.admonition, details):is(.quote, .cite) { --c: var(--muted); }
+
+.doc .tabbed-set { margin: var(--space-md) 0; }
+.doc .tabbed-labels > label { color: var(--muted); }
+
+.doc .keys kbd, .doc kbd {
+  font: 500 0.85em/1 var(--font-mono); padding: 2px 6px;
+  border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--surface);
+}
+.doc .keys > span { padding: 0 2px; color: var(--muted); }
+.doc mark { background: color-mix(in srgb, var(--warning) 25%, transparent); color: inherit; padding: 0 2px; }
+.doc ins { text-decoration-color: var(--accent); }
+.doc abbr[title] { text-decoration: underline dotted; cursor: help; }
+.doc .contains-task-list { list-style: none; padding-inline-start: var(--space-md); }
+.doc .task-list-item-checkbox { margin-inline-end: var(--space-sm); accent-color: var(--accent); }
+.doc dl dt { font-weight: 600; margin-top: var(--space-sm); }
+.doc dl dd { margin: 0 0 var(--space-sm) var(--space-lg); }
+.doc .footnotes { font-size: 0.9em; color: var(--muted); }

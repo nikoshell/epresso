@@ -78,6 +78,13 @@ window.addEventListener("load", function() {
 });
 </script>
         <link rel="stylesheet" href="{{ asset('docs.css') }}">
+        {% for href in site.config.theme.get('extra_css', []) %}
+            <link rel="stylesheet" href="{{ href }}">
+        {% endfor %}
+        {% for src in site.config.theme.get('extra_javascript', []) %}
+            {# not a literal tag: an .ep file allows one <script> block #}
+            {{ ('<' ~ 'script src="' ~ (src | e) ~ '" defer></' ~ 'script>') | safe }}
+        {% endfor %}
         <slot name="head" />
     </head>
     <body>

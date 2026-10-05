@@ -30,6 +30,8 @@ epresso build   # deterministic, incremental → dist/
 - Assets: content-hashed `asset()`, `public/` passthrough, esbuild JS bundling, **PostCSS/Tailwind CSS** pipeline, **Pillow responsive images** (`image()` → WebP srcset).
 - **First-class client behavior** — a `.ep` component's `<script>` block is bundled (esbuild) page-level JS, injected before `</body>`. No separate islands/ dir.
 - Generated outputs: `sitemap.xml`, `robots.txt`, `llms.txt`, `404.html`, `search-index.json`, and an RSS/Atom helper.
+- **Docs, blog and MkDocs migration** — `epresso docs` builds any Markdown repo (zero-config `README.md` + `docs/`, `docs.toml`, or an MkDocs `mkdocs.yml` read live; `epresso import mkdocs` converts it). Bundled plugins add Material syntax (`epresso_mkdocs`), a blog with MkDocs URLs (`epresso_blog`), social cards (`epresso_social`) and responsive images (`epresso_optimize`).
+- **Fast builds** — incremental page reuse (plugins included), dependency tracking down to nav metadata, and parallel rendering across CPU cores (`[build] jobs`).
 - **Plugin API** — a capability registry: named plugins with lifecycle hooks that receive a scoped `Capabilities` handle (never the raw `Site`), so extensions are deterministic and isolated. See the [plugin guide](https://github.com/nikoshell/epresso/blob/main/docs/guides/extending/plugins.md).
 - Theme scaffolding — `epresso new` (interactive), or `epresso new <template|theme|git-url|dir> <dest>`.
 
@@ -446,7 +448,8 @@ Themes are git-cloned (or copied) from their own repos and given to you as a sta
 | `epresso dev` | Development server with live reload |
 | `epresso build` | Deterministic + incremental production build |
 | `epresso preview` | Build then serve `dist/` (production preview) |
-| `epresso docs` | Build + serve a project's documentation (port 4321), or write it with `--out` |
+| `epresso docs [dir\|git]` | Build + serve docs (port 4321) or write them with `--out`: no argument = epresso's own docs; `.`/a dir/a git source = that project (`site.toml` → `docs.toml` → `mkdocs.yml` → zero-config `README.md` + `docs/`) |
+| `epresso import mkdocs` | Write a `docs.toml` from an MkDocs `mkdocs.yml` |
 | `epresso serve` | Serve an already-built `dist/` (no build) |
 | `epresso clean` | Remove `dist/` and the build cache |
 | `epresso layers` | List the component/layout layers resolved from `[layers] use` |

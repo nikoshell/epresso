@@ -1,0 +1,24 @@
+name: bench-dispatch
+
+# Ask nikoshell/epresso-benchmark to benchmark this commit (main pushes) or
+# release (tags). The benchmark repo measures only the newest main commit.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send repository_dispatch
+        env:
+          GH_TOKEN: ${{ secrets.BENCHMARK_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "BENCHMARK_DISPATCH_TOKEN not set; skipping"; exit 0; fi
+          tag=""
+          case "$GITHUB_REF" in refs/tags/*) tag="${GITHUB_REF#refs/tags/}";; esac
+          gh api repos/nikoshell/epresso-benchmark/dispatches \
+            -f event_type=epresso-push \
+            -F "client_payload[sha]=$GITHUB_SHA" \
+            -F "client_payload[tag]=$tag"

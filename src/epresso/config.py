@@ -40,6 +40,9 @@ class BuildConfig(BaseModel):
     # "/epresso/" for a project GitHub Pages site). Empty = serve at root.
     base: str = ""
     redirects: bool = True  # emit redirect pages from the `redirects` config (Option C)
+    # Worker processes for rendering (0 = one per CPU, up to 8; 1 = serial).
+    # Builds under 64 routes, and platforms without fork(), always render serially.
+    jobs: int = 0
     # Reserved for future i18n (single-locale for now).
 
 
@@ -200,9 +203,7 @@ class Config(BaseModel):
                     continue
                 if isinstance(dst, dict) and set(dst).issubset({"destination", "status"}) and "destination" in dst:
                     continue
-                raise ValueError(
-                    "redirect target must be a string or {destination, status} (301/302)"
-                )
+                raise ValueError("redirect target must be a string or {destination, status} (301/302)")
         return v
 
     def dir_content(self) -> Path:
@@ -338,5 +339,3 @@ def load_config(root: Path | None = None, env: str | None = None) -> Config:
     if _base:
         config.build.base = "/" + _base + "/"
     return config
-
-

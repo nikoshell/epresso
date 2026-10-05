@@ -29,7 +29,7 @@ class AssetPipeline:
         # ``styles/`` and ``public/`` are used after the site's own (site wins).
         self.layer_roots: list[Path] = []
         # Extra (dir, url_prefix) trees copied verbatim (``caps.add_static``).
-        self.extra_static: list[tuple[Path, str]] = []
+        self.extra_static: list[tuple[Path, str, tuple[str, ...]]] = []
 
     # -- reference resolution ------------------------------------------------
     def resolve(self, name: str) -> str:
@@ -103,13 +103,16 @@ class AssetPipeline:
         """Copy each ``caps.add_static`` dir (minus Markdown and ``_``-private files)."""
         from .private import is_private
 
-        for src, prefix in self.extra_static:
+        for src, prefix, exclude in self.extra_static:
             if not src.is_dir():
                 continue
+            skip = [Path(x.strip("/")).parts for x in exclude]
             for f in src.rglob("*"):
                 rel = f.relative_to(src)
                 if not f.is_file() or is_private(rel) or f.suffix.lower() in {".md", ".markdown"}:
                     continue
+                if any(rel.parts[: len(x)] == x for x in skip):
+                    continue  # another plugin publishes that dir
                 if any(p.startswith(".") or p in _SKIP_STATIC for p in rel.parts[:-1]):
                     continue
                 dst = out_dir / prefix.strip("/") / rel

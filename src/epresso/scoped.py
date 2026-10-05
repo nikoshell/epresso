@@ -36,7 +36,11 @@ __all__ = ["scope_css", "inject_scope_attr"]
 # content the docs `Doc` layout hands to `Base`. The callback then runs only for
 # tags that need work (~33% faster on a 250 KB html), and the output is identical:
 # a skipped tag would have been returned unchanged by the callback anyway.
-_TAG_RE = re.compile(r"<(?![^>]*data-epresso-)[^>]+>")
+# Opening tags not yet scoped. Closing tags and comments/doctypes never take the
+# attribute, so they're excluded in the regex itself: every scoped ancestor
+# re-scans its whole subtree, and matching them meant a Python callback per
+# closing tag per ancestor (millions on a 1000-page docs build).
+_TAG_RE = re.compile(r"<(?![/!])(?![^>]*data-epresso-)[^>]+>")
 
 # At-rules that contain nested style rules which must also be scoped.
 _RULE_AT_RULES = {"media", "supports", "layer", "container", "scope", "document"}
@@ -129,6 +133,7 @@ def scope_css(css: str, scope_hash: str, strategy: str = "attribute") -> str:
     return _scope_css_cached(css, scope_hash, strategy)
 
 
+@lru_cache(maxsize=512)  # same component markup (e.g. the cached sidebar) recurs on every page
 def inject_scope_attr(html: str, scope_hash: str) -> str:
     """Add ``data-epresso-<hash>`` to element opening tags in ``html``.
 

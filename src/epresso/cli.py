@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -56,7 +57,7 @@ def _scaffold_basic(root: Path) -> None:
     index_ep = root / "pages" / "index.ep"
     if not index_ep.exists():
         index_ep.write_text(
-            '---\n---\n<Base title={site.config.site.name}>\n<h1>Hello, epresso!</h1>\n<p>This is your first page.</p>\n</Base>\n',
+            "---\n---\n<Base title={site.config.site.name}>\n<h1>Hello, epresso!</h1>\n<p>This is your first page.</p>\n</Base>\n",
             encoding="utf-8",
         )
 
@@ -330,6 +331,12 @@ def build(
     )
     for w in result.asset_warnings:
         log.warn(f"⚠️ {w}")
+    if not result.pages:
+        log.info(
+            f"ℹ️ no pages in {site.config.root}: a site needs site.toml and pages/ "
+            "(e.g. pages/index.ep or pages/index.md), optionally content/ for collections. "
+            "`epresso init` scaffolds one; for a folder of Markdown use `epresso docs .`"
+        )
     if perf:
         _print_perf(result)
     if prof is not None:
@@ -380,6 +387,55 @@ def preview(
     serve_dist(site.config.dir_output(), host=host, port=resolved, site=site)
 
 
+def _mkdocs_project(yml: Path, port: int, theme: Path | None, perf: bool, start: float) -> Path:
+    """Build a temp docs project straight from ``mkdocs.yml`` (warnings printed)."""
+    from .docsgen import docs_config_project  # noqa: PLC0415
+    from .mkdocs_import import mkdocs_to_docs_config  # noqa: PLC0415
+
+    _status(perf, start, f"📖 Rendering docs from {yml}…")
+    try:
+        cfg, warnings = mkdocs_to_docs_config(yml)
+        for w in warnings:
+            typer.secho(f"⚠ mkdocs.yml {w}", fg=typer.colors.YELLOW, err=True)
+        return docs_config_project(cfg, yml.parent.resolve(), port, theme, label=str(yml))
+    except EpressoError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+
+
+import_app = typer.Typer(help="Import a project from another tool.", no_args_is_help=True)
+app.add_typer(import_app, name="import")
+
+
+@import_app.command("mkdocs")
+def import_mkdocs(
+    config: Path = typer.Argument(Path("mkdocs.yml"), help="Path to mkdocs.yml"),
+    theme: Path | None = typer.Option(None, help="Theme project to record in docs.toml"),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing docs.toml"),
+) -> None:
+    """Write a docs.toml from an MkDocs mkdocs.yml (then run `epresso docs`)."""
+    from .mkdocs_import import docs_toml_text, mkdocs_to_docs_config  # noqa: PLC0415
+
+    if not config.is_file():
+        typer.secho(f"no mkdocs.yml at {config}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    out = config.parent / "docs.toml"
+    if out.exists() and not force:
+        typer.secho(f"{out} exists — pass --force to overwrite", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    try:
+        cfg, warnings = mkdocs_to_docs_config(config)
+    except EpressoError as e:
+        typer.secho(str(e), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from e
+    if theme is not None:
+        cfg = {"theme": os.path.relpath(theme.resolve(), config.parent.resolve()), **cfg}
+    out.write_text(docs_toml_text(cfg), encoding="utf-8")
+    for w in warnings:
+        typer.secho(f"⚠ {w}", fg=typer.colors.YELLOW, err=True)
+    typer.echo(f"✅ wrote {out} — run `epresso docs` to preview")
+
+
 @app.command()
 def docs(
     root: str | None = typer.Argument(
@@ -390,7 +446,9 @@ def docs(
     theme: Path | None = typer.Option(None, help="Theme project for bare Markdown (default: the bundled docs theme)"),
     env: str | None = typer.Option(None, help="Environment (loads site.<env>.toml + .env.<env>)"),
     perf: bool = typer.Option(False, "--perf", help="Print detailed build-phase timings"),
-    out: Path | None = typer.Option(None, "--out", help="Write a static production build to this directory instead of serving"),
+    out: Path | None = typer.Option(
+        None, "--out", help="Write a static production build to this directory instead of serving"
+    ),
 ) -> None:
     """Build the documentation; serve it (default port 4321) or write it with --out."""
     from .docsgen import auto_docs_project, docs_toml_project, materialize_docs_source  # noqa: PLC0415
@@ -399,19 +457,13 @@ def docs(
     bundled = bundled_docs_theme()
     cwd = Path.cwd()
     if root is None:
-        # cwd site.toml → build it; docs.toml or a docs/ dir → the docs plugin;
-        # otherwise the bundled theme (epresso's own docs).
-        if (cwd / "site.toml").is_file():
-            doc_root = cwd
-        elif (cwd / "docs.toml").is_file() or (cwd / "docs").is_dir():
-            _status(perf, _start, f"📖 Rendering docs from {cwd}…")
-            try:
-                doc_root = docs_toml_project(cwd / "docs.toml", port, theme)
-            except EpressoError as e:
-                typer.secho(str(e), fg=typer.colors.RED, err=True)
-                raise typer.Exit(1) from e
-        else:
-            doc_root = bundled
+        # Plain `epresso docs` is epresso's own documentation. A project is
+        # `epresso docs .` (or `<dir>`): point there when cwd looks like one.
+        for marker in ("site.toml", "docs.toml", "mkdocs.yml"):
+            if (cwd / marker).is_file():
+                typer.secho(f"found {marker} — run `epresso docs .` to build this project", fg=typer.colors.YELLOW)
+                break
+        doc_root = bundled
     else:
         try:
             doc_root = materialize_docs_source(root, Path.cwd() / ".cache" / "repos")
@@ -427,7 +479,15 @@ def docs(
             )
             raise typer.Exit(1)
     doc_root = doc_root.resolve()
+    if (
+        not (doc_root / "site.toml").exists()
+        and not (doc_root / "docs.toml").is_file()
+        and (doc_root / "mkdocs.yml").is_file()
+    ):
+        doc_root = _mkdocs_project(doc_root / "mkdocs.yml", port, theme, perf, _start)
     if not (doc_root / "site.toml").exists() and (doc_root / "docs.toml").is_file():
+        if (doc_root / "mkdocs.yml").is_file():
+            typer.echo("using docs.toml (mkdocs.yml ignored)")
         _status(perf, _start, f"📖 Rendering docs from {doc_root / 'docs.toml'}…")
         try:
             doc_root = docs_toml_project(doc_root / "docs.toml", port, theme)
@@ -452,7 +512,8 @@ def docs(
 
     try:
         site = Site.load(doc_root, env=_resolve_env(env, "production"), load=False)
-        result = site.build(progress=_make_progress())
+        # The temp project is stable per source: keep its page cache (dist/ is fresh).
+        result = site.build(progress=_make_progress(), keep_cache=True)
         _end_progress()
     except EpressoError as e:
         log.error(str(e))
@@ -601,7 +662,7 @@ def fmt(
     if full and not _fmt._deep_available():
         typer.secho(
             "epresso fmt --full needs the optional formatters, which are not installed.\n"
-            "  pip install -e \".[fmt]\"      (or for uv projects: uv sync --extra fmt)\n"
+            '  pip install -e ".[fmt]"      (or for uv projects: uv sync --extra fmt)\n'
             "Installs: ruff, djhtml, cssbeautifier, jsbeautifier.",
             fg=typer.colors.RED,
             err=True,

@@ -14,7 +14,8 @@ optional project directory (`root`), defaulting to the current directory.
 | `epresso dev [root]` | Development server with live reload |
 | `epresso build [root]` | Deterministic + incremental production build |
 | `epresso preview [root]` | Build then serve `dist/` (production preview) |
-| `epresso docs [root]` | Build + serve a project's documentation (port 4321), or write it with `--out` |
+| `epresso docs [root]` | Build + serve docs (port 4321) or write them with `--out`; no `root` = epresso's own docs, `.` = this project |
+| `epresso import mkdocs` | Write a `docs.toml` from an MkDocs `mkdocs.yml` |
 | `epresso serve [root]` | Serve an already-built `dist/` (no build) |
 | `epresso clean [root]` | Remove `dist/` and the build cache |
 | `epresso layers [root]` | List the component/layout layers resolved from `[layers] use` |
@@ -31,7 +32,8 @@ Build a directory of Markdown as a documentation site and serve it (default port
 4321), or write a static build with `--out`.
 
 ```bash
-epresso docs                                 # ./site.toml, ./docs.toml or ./docs/ (else the bundled example)
+epresso docs                                 # epresso's own documentation
+epresso docs .                               # this project (site.toml / docs.toml / mkdocs.yml / zero-config)
 epresso docs ../my-repo                      # a local checkout
 epresso docs github:owner/repo@v1            # clone + render a remote repo
 epresso docs https://github.com/owner/repo   # same, by URL
@@ -49,23 +51,36 @@ epresso docs ../my-repo --out dist/docs      # static build, no server
 - **`docs.toml`** — a directory with a `docs.toml` (and no `site.toml`): the
   docs theme with the `epresso_docs` plugin, fed by the sources it lists (see
   below).
-- **bare Markdown directory** — epresso copies the docs theme into a temporary
-  project, injects the Markdown as its docs collection, and renders it, so any
-  directory of Markdown previews without writing a config. Inside a git checkout
-  it copies the markdown under the docs directory (default `docs/`, override with
-  `EPRESSO_DOCS_DIR` or `REPO_DOCS`) plus a root README.
+- **any other directory (zero-config)** — the top-level `README.md` is the
+  homepage and every Markdown file under `docs/` is a page (override the dir with
+  `EPRESSO_DOCS_DIR` or `REPO_DOCS`). No `docs/` → a console warning and a site
+  with just the homepage. No `README.md` → a placeholder homepage explaining what
+  to create (also in `--out` builds). `README.md` wins over `docs/index.md`.
+  Other files in the directory are not read.
 
-With no argument, `epresso docs` uses the current directory: its `site.toml`
-if there is one, otherwise its `docs.toml` or `docs/` directory, otherwise the
-bundled example.
+- **`mkdocs.yml`** — an MkDocs project (no `site.toml` or `docs.toml`): read
+  live and rendered with the docs theme. See
+  [Migrate from MkDocs](/guides/themes/migrate-from-mkdocs/).
+
+With no argument, `epresso docs` shows epresso's own documentation; when the
+current directory holds a `site.toml`, `docs.toml` or `mkdocs.yml` it also prints
+a hint to run `epresso docs .`. For a directory it checks, in order: `site.toml`,
+`docs.toml`, `mkdocs.yml`, then zero-config. With both `docs.toml` and
+`mkdocs.yml` it uses `docs.toml` and says so.
 
 ### Several sources: `docs.toml`
 
 ```toml
 title = "My Project"            # → [site] name
+extra_css = ["css/extra.css"]   # copied, loaded after the theme CSS
+extra_javascript = ["js/extra.js"]
+redirects = [{ "/old/" = "/guide/install/" }]
 
 [[sources]]
 source = "docs"                 # local dir, relative to docs.toml
+# optional, MkDocs-shaped: replaces folder grouping for this source;
+# unlisted pages are built but not shown in the sidebar
+nav = ["index.md", { "Guide" = ["guide/install.md", { "Usage" = "guide/usage.md" }] }]
 
 [[sources]]
 source = "github:org/plugin-a@v1"
@@ -85,7 +100,10 @@ one prev/next chain. Two sources producing the same page are a build error;
 give one a `prefix`. `docs.toml` is a shorthand: epresso compiles it into a
 `site.toml` with `plugins = ["epresso_docs"]` and a `[plugin.epresso_docs]`
 table, which is exactly what a full site would write. Without `sources` it
-reads `./docs`. Relative images in every source resolve (see the plugins guide).
+reads `./docs`. Relative images in every source resolve (see the plugins guide); only files a built page references are published.
+Allowed top-level keys: `title`, `theme`, `site`, `sources`, `base`, `redirects`,
+`extra_css`, `extra_javascript`, `blog` (options for [`epresso_blog`](/guides/content/blog/)); per source: `source`, `dir`, `prefix`, `title`,
+`repo_url`, `nav`. Anything else is an error.
 
 ### The link back to the repository
 
@@ -113,6 +131,24 @@ for the full workflow.
 | `--host H` | Host to bind (default `127.0.0.1`) |
 | `--env NAME` | Environment (loads `site.<env>.toml` + `.env.<env>`; default `production`) |
 | `--perf` | Print detailed build-phase timings |
+
+## `epresso import mkdocs`
+
+Write a `docs.toml` from an MkDocs `mkdocs.yml`, then preview with `epresso docs .`.
+
+```bash
+epresso import mkdocs                    # ./mkdocs.yml → ./docs.toml
+epresso import mkdocs site/mkdocs.yml --theme ../my-theme
+epresso import mkdocs --force            # overwrite an existing docs.toml
+```
+
+Settings without an epresso equivalent are listed as warnings. See
+[Migrate from MkDocs](/guides/themes/migrate-from-mkdocs/).
+
+| Flag | Meaning |
+|------|---------|
+| `--theme PATH` | Record a theme project in `docs.toml` |
+| `--force` | Overwrite an existing `docs.toml` |
 
 ## `epresso serve`
 

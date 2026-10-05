@@ -1,0 +1,34 @@
+---
+from pydantic import BaseModel
+
+
+class Props(BaseModel):
+    post: dict
+---
+
+<p class="blog-meta">
+    <time datetime="{{ props.post.date }}">{{ props.post.date_display }}</time>
+    {% if props.post.authors %}
+        <span class="blog-authors">
+            {% for a in props.post.authors %}
+                {% if a.avatar %}<img src="{{ a.avatar }}" alt="" width="20" height="20" loading="lazy">{% endif %}
+                {% if a.url %}<a href="{{ a.url }}">{{ a.name }}</a>{% else %}{{ a.name }}{% endif %}{% if not loop.last %},{% endif %}
+            {% endfor %}
+        </span>
+    {% endif %}
+    {% if props.post.categories %}
+        <span class="blog-cats">
+            {% for c in props.post.categories %}
+                <a href="{{ c.url }}">{{ c.name }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </span>
+    {% endif %}
+</p>
+
+<style>
+.blog-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: center; margin: 0 0 1rem;
+  color: var(--muted, #6b7280); font-size: 0.9em; }
+.blog-authors { display: inline-flex; gap: 0.35rem; align-items: center; }
+.blog-authors img { border-radius: 50%; }
+.blog-meta a { color: inherit; }
+</style>

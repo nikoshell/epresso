@@ -38,6 +38,7 @@ def line_at(text: str, pos: int) -> int:
     """1-based line number of ``pos`` in ``text``."""
     return text.count("\n", 0, pos) + 1
 
+
 # Opening ``--- <spaces>\n`` … closing ``^--- <spaces>\n?`` (line-start). The
 # line-start ``^`` (MULTILINE) handles both a non-empty block (``title: x\n---``)
 # and an empty one (``---\n---``), while rejecting a mid-line ``---`` inside
@@ -61,7 +62,7 @@ def split_frontmatter(source: str) -> tuple[str | None, str]:
     m = _FRONTMATTER_RE.match(source)
     if not m:
         return None, source
-    return m.group(1), source[m.end():]
+    return m.group(1), source[m.end() :]
 
 
 def strip_frontmatter(source: str) -> str:

@@ -1,7 +1,7 @@
 ---
 from urllib.parse import quote, urlparse
 
-# "Built with epresso" → epresso.top, tagged so Umami's UTM report shows which
+# "Built with epresso" → epresso.top, UTM-tagged so analytics show which
 # docs site a visit came from. No tags on epresso.top itself (internal link).
 _host = (urlparse(site.config.site.url or "").hostname or "").removeprefix("www.")
 _source = site.config.site.name if _host in ("", "localhost", "127.0.0.1") else _host

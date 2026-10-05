@@ -1,0 +1,89 @@
+---
+import re
+
+from epresso.routing import Route
+
+opts = site.config.plugin["epresso_blog"]["_resolved"]
+root = opts["_url"]
+per_page = max(1, int(opts["pagination_per_page"]))
+
+
+def _slug(text):
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    return re.sub(r"[-\s]+", "-", re.sub(r"[^\w\s-]", "", text).strip().lower())
+
+
+def _excerpt(entry):
+    html = entry.rendered.html if entry.rendered else ""
+    if "<!-- more -->" in html:
+        return html.split("<!-- more -->", 1)[0]
+    m = re.search(r"<p\b.*?</p>", html, re.S)
+    return m.group(0) if m else ""
+
+
+def _card(entry):
+    c = entry.computed
+    return {
+        "title": entry.data.title, "url": c["url"], "date": entry.data.date, "date_display": c["date_display"],
+        "authors": c["authors"], "categories": c["category_links"], "excerpt": _excerpt(entry),
+    }
+
+
+def _listing(path, title, posts, intro, entry, extra):
+    """One listing (index / archive year / category), paginated like MkDocs."""
+    pages = [posts[i : i + per_page] for i in range(0, len(posts), per_page)] or [[]]
+    out = []
+    for n, chunk in enumerate(pages, 1):
+        url = path if n == 1 else f"{path}page/{n}/"
+        pager = {
+            "prev": (path if n == 2 else f"{path}page/{n - 1}/") if n > 1 else "",
+            "next": f"{path}page/{n + 1}/" if n < len(pages) else "",
+            "page": n, "pages": len(pages),
+        }
+        out.append(Route(
+            path=url, data=entry if n == 1 else None,
+            params={"kind": "list", "title": title, "posts": [_card(p) for p in chunk],
+                    "intro": intro if n == 1 else "", "pager": pager, **extra},
+        ))
+    return out
+
+
+def get_static_paths():
+    entries = site.get_collection("blog")
+    posts = sorted((e for e in entries if e.computed["kind"] == "post"), key=lambda e: e.data.date, reverse=True)
+    index = next((e for e in entries if e.computed["kind"] == "index"), None)
+    years = sorted({p.computed["year"] for p in posts}, reverse=True) if opts["archive"] else []
+    cats = sorted({c for p in posts for c in p.data.categories}, key=str.lower) if opts["categories"] else []
+    nav = {
+        "archive": [{"name": str(y), "url": f"{root}archive/{y}/"} for y in years],
+        "categories": [{"name": c, "url": f"{root}category/{_slug(c)}/"} for c in cats],
+    }
+    intro = index.rendered.html if index is not None and index.rendered else ""
+    title = index.data.title if index is not None else "Blog"
+    routes = _listing(root, title, posts, intro, index, {"nav": nav})
+    for y in years:
+        routes += _listing(f"{root}archive/{y}/", f"{y}", [p for p in posts if p.computed["year"] == y], "", None, {"nav": nav})
+    for c in cats:
+        routes += _listing(f"{root}category/{_slug(c)}/", c, [p for p in posts if c in p.data.categories], "", None, {"nav": nav})
+    for p in posts:
+        routes.append(Route(
+            path=p.computed["url"], data=p, cache_key=p.digest,
+            params={"kind": "post", "title": p.data.title, "post": _card(p), "headings": p.headings,
+                    "nav": nav},
+        ))
+    return routes
+
+
+---
+
+<BlogLayout title={params.title ~ " · " ~ site.config.site.name} path={route.path} headings={params.headings | default([])}>
+    {% if params.kind == "post" %}
+        <BlogPost post={params.post} nav={params.nav}>
+            {{ content }}
+        </BlogPost>
+    {% else %}
+        <BlogIndex title={params.title} intro={params.intro} posts={params.posts} pager={params.pager} nav={params.nav} />
+    {% endif %}
+</BlogLayout>

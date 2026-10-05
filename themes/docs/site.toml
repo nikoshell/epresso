@@ -1,4 +1,4 @@
-plugins = ["epresso_docs", "epresso_pandoc", "epresso_mkdocs_tabs", "epresso_umami", "epresso_page_feedback"]
+plugins = ["epresso_docs", "epresso_blog", "epresso_pandoc", "epresso_mkdocs", "epresso_social", "epresso_optimize", "epresso_umami", "epresso_page_feedback"]
 
 [site]
 name = "epresso"
@@ -111,3 +111,7 @@ repo = "../.."
 
 [[redirects]]
 "/reference/" = "/reference/template-directives/"
+
+# Content images: WebP srcset sized for the docs column (--content-max).
+[plugin.epresso_optimize]
+sizes = "(max-width: 46rem) 100vw, 46rem"

@@ -62,6 +62,11 @@ API: {{ env_vars.API_URL }}
 * `EPRESSO_LOG=<path>` additionally **appends every log line to a file** (plain
   text, no color) while still printing to the console — handy for CI or
   capturing `EPRESSO_DEBUG` output to disk.
+* `EPRESSO_JOBS=<n>` sets the render worker processes (`[build] jobs`; `1` =
+  serial).
+* `EPRESSO_DISABLE_PLUGINS=name1,name2` turns plugins off without editing
+  `site.toml` — e.g. `EPRESSO_DISABLE_PLUGINS=epresso_social,epresso_optimize`
+  for a build without social cards or image variants.
 * `load_env_file(root, env)` returns the vars as a dict without mutating
   `os.environ`; the site exposes them to templates as `env_vars`.
 * epresso is single-locale for now; i18n is reserved for a future release.

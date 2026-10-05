@@ -9,8 +9,8 @@ same rules the build enforces, which means the editor and the build agree:
   errors in the frontmatter;
 * **formatting** — the canonical ``epresso fmt`` output for the whole document.
 
-Any LSP-capable editor can use it (Neovim's built-in client, VS Code via the
-bundled extension, Emacs, …)::
+Any LSP-capable editor can use it (the bundled editor extension, or any
+editor's built-in LSP client)::
 
     epresso lsp        # speaks LSP on stdin/stdout
 """

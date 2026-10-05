@@ -1,6 +1,6 @@
 """cn() — merge utility class lists, last conflicting utility wins.
 
-A dependency-free stand-in for `tailwind-merge` / rust-ui's `tw_merge!`, used in
+A dependency-free utility-class merger, used in
 component bodies::
 
     <button class="{{ cn('px-4 py-2 bg-primary', props.class_name) }}">
@@ -31,7 +31,10 @@ _RULES: tuple[tuple[str, str], ...] = tuple(
     (rf"(?:{p})", g)
     for p, g in (
         # ── display / position ────────────────────────────────────────────
-        (r"block|inline|inline-block|inline-flex|flex|grid|inline-grid|inline-table|flow-root|contents|hidden|list-item|table-cell|table-row|table-caption", "display"),
+        (
+            r"block|inline|inline-block|inline-flex|flex|grid|inline-grid|inline-table|flow-root|contents|hidden|list-item|table-cell|table-row|table-caption",
+            "display",
+        ),
         (r"static|fixed|absolute|relative|sticky", "position"),
         # `collapse` is Tailwind's `visibility: collapse`, but it is also daisyUI's
         # disclosure component — merging it away would delete the component, so only
@@ -181,13 +184,19 @@ _RULES: tuple[tuple[str, str], ...] = tuple(
         # `text-rotate`, so `<TextRotate class_name="text-primary">` lost its own base
         # class. An unrecognised `text-<something>` is now left alone (it may be a
         # component class, and not merging is recoverable where deleting is not).
-        (r"text-(?:primary|secondary|accent|neutral|info|success|warning|error|base-content|-?content|current|inherit|transparent|black|white)(?:-content)?", "text-color"),
+        (
+            r"text-(?:primary|secondary|accent|neutral|info|success|warning|error|base-content|-?content|current|inherit|transparent|black|white)(?:-content)?",
+            "text-color",
+        ),
         (r"text-\[[^\]]*\]", "text-color"),
         (r"font-(?:thin|extralight|light|normal|medium|semibold|bold|extrabold|black|\[[^\]]*\])", "font-weight"),
         (r"font-(?:sans|serif|mono|\[[^\]]*\])", "font-family"),
         (r"font-(?:italic|not-italic)", "font-style"),
         (r"font-stretch-.*", "font-stretch"),
-        (r"tabular-nums|proportional-nums|diagonal-fractions|stacked-fractions|oldstyle-nums|lining-nums|ordinal|slashed-zero", "font-variant-numeric"),
+        (
+            r"tabular-nums|proportional-nums|diagonal-fractions|stacked-fractions|oldstyle-nums|lining-nums|ordinal|slashed-zero",
+            "font-variant-numeric",
+        ),
         (r"leading-.*", "line-height"),
         (r"tracking-.*", "letter-spacing"),
         (r"line-clamp-.*", "line-clamp"),
@@ -279,25 +288,102 @@ _CONFLICTS: dict[str, tuple[str, ...]] = {
     "size": ("size", "width", "height"),
     "width": ("width", "size"),
     "height": ("height", "size"),
-    "padding": ("padding", "padding-inline", "padding-block", "padding-top", "padding-right", "padding-bottom", "padding-left", "padding-inline-start", "padding-inline-end"),
+    "padding": (
+        "padding",
+        "padding-inline",
+        "padding-block",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "padding-inline-start",
+        "padding-inline-end",
+    ),
     "padding-inline": ("padding-inline", "padding-left", "padding-right", "padding-inline-start", "padding-inline-end"),
     "padding-block": ("padding-block", "padding-top", "padding-bottom"),
-    "margin": ("margin", "margin-inline", "margin-block", "margin-top", "margin-right", "margin-bottom", "margin-left", "margin-inline-start", "margin-inline-end"),
+    "margin": (
+        "margin",
+        "margin-inline",
+        "margin-block",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "margin-inline-start",
+        "margin-inline-end",
+    ),
     "margin-inline": ("margin-inline", "margin-left", "margin-right", "margin-inline-start", "margin-inline-end"),
     "margin-block": ("margin-block", "margin-top", "margin-bottom"),
     "gap": ("gap", "column-gap", "row-gap"),
-    "inset": ("inset", "inset-inline", "inset-block", "top", "right", "bottom", "left", "inset-inline-start", "inset-inline-end"),
+    "inset": (
+        "inset",
+        "inset-inline",
+        "inset-block",
+        "top",
+        "right",
+        "bottom",
+        "left",
+        "inset-inline-start",
+        "inset-inline-end",
+    ),
     "inset-inline": ("inset-inline", "left", "right", "inset-inline-start", "inset-inline-end"),
     "inset-block": ("inset-block", "top", "bottom"),
-    "border-width": ("border-width", "border-inline-width", "border-block-width", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width", "border-inline-start-width", "border-inline-end-width"),
-    "border-inline-width": ("border-inline-width", "border-left-width", "border-right-width", "border-inline-start-width", "border-inline-end-width"),
+    "border-width": (
+        "border-width",
+        "border-inline-width",
+        "border-block-width",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-inline-start-width",
+        "border-inline-end-width",
+    ),
+    "border-inline-width": (
+        "border-inline-width",
+        "border-left-width",
+        "border-right-width",
+        "border-inline-start-width",
+        "border-inline-end-width",
+    ),
     "border-block-width": ("border-block-width", "border-top-width", "border-bottom-width"),
-    "border-style": ("border-style", "border-inline-style", "border-block-style", "border-top-style", "border-right-style", "border-bottom-style", "border-left-style"),
-    "border-color": ("border-color", "border-inline-color", "border-block-color", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color", "border-inline-start-color", "border-inline-end-color"),
-    "border-radius": ("border-radius", "border-radius-t", "border-radius-r", "border-radius-b", "border-radius-l",
-                      "border-radius-s", "border-radius-e", "border-radius-tl", "border-radius-tr",
-                      "border-radius-br", "border-radius-bl", "border-radius-ss", "border-radius-se",
-                      "border-radius-es", "border-radius-ee"),
+    "border-style": (
+        "border-style",
+        "border-inline-style",
+        "border-block-style",
+        "border-top-style",
+        "border-right-style",
+        "border-bottom-style",
+        "border-left-style",
+    ),
+    "border-color": (
+        "border-color",
+        "border-inline-color",
+        "border-block-color",
+        "border-top-color",
+        "border-right-color",
+        "border-bottom-color",
+        "border-left-color",
+        "border-inline-start-color",
+        "border-inline-end-color",
+    ),
+    "border-radius": (
+        "border-radius",
+        "border-radius-t",
+        "border-radius-r",
+        "border-radius-b",
+        "border-radius-l",
+        "border-radius-s",
+        "border-radius-e",
+        "border-radius-tl",
+        "border-radius-tr",
+        "border-radius-br",
+        "border-radius-bl",
+        "border-radius-ss",
+        "border-radius-se",
+        "border-radius-es",
+        "border-radius-ee",
+    ),
     "border-radius-t": ("border-radius-t", "border-radius-tl", "border-radius-tr"),
     "border-radius-r": ("border-radius-r", "border-radius-tr", "border-radius-br"),
     "border-radius-b": ("border-radius-b", "border-radius-br", "border-radius-bl"),
@@ -384,9 +470,9 @@ def main() -> int:
 
     # ── must NOT merge: different properties that share a prefix ─────────
     assert cn("text-2xs", "text-foreground") == "text-2xs text-foreground"
-    assert cn("text-xs", "text-2xs") == "text-2xs"          # both font-size
+    assert cn("text-xs", "text-2xs") == "text-2xs"  # both font-size
     assert cn("flex-1", "flex-col") == "flex-1 flex-col"
-    assert cn("flex", "hidden") == "hidden"                 # display: last wins
+    assert cn("flex", "hidden") == "hidden"  # display: last wins
     assert cn("inline-flex", "grid") == "grid"
     assert cn("top-0", "right-0") == "top-0 right-0"
     assert cn("inset-x-0", "inset-y-2") == "inset-x-0 inset-y-2"

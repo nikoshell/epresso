@@ -102,9 +102,7 @@ def _raise_first(violations: list[tuple[str, int]], label: str) -> NoReturn:
 
 # Real HTML void elements. Matched only when written lowercase: component tags
 # are Capitalized, so <Base>/<Link>/<Source> must not look like <base>/<link>.
-_VOID_TAGS = frozenset(
-    "area base br col embed hr img input link meta param source track wbr".split()
-)
+_VOID_TAGS = frozenset("area base br col embed hr img input link meta param source track wbr".split())
 _HTML_TAG = re.compile(r"<\s*(/?)\s*([A-Za-z][-\w:]*)([^>]*?)(/?)\s*>", re.DOTALL)
 _SIDECAR_BLOCK = re.compile(r"<(style|script)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
 _JINJA_NAME = re.compile(r"\{%-?\s*([A-Za-z_]+)")
@@ -113,10 +111,7 @@ _ROOT_FIX = (
     "an .ep file renders at most one root per branch: wrap siblings in "
     "<Fragment>…</Fragment> (or <></>); a branch that renders nothing needs no marker"
 )
-_SIDECAR_FIX = (
-    "one scoped <style>, one <style is:global> and one <script> per .ep file — "
-    "merge same-kind blocks"
-)
+_SIDECAR_FIX = "one scoped <style>, one <style is:global> and one <script> per .ep file — merge same-kind blocks"
 
 
 @dataclass
@@ -141,8 +136,7 @@ def _frame_violations(frame: _Frame, where: str) -> list[tuple[int, str]]:
     return [
         (
             frame.roots[1][0],
-            f"{len(frame.roots)} roots in the same branch: {nodes} — wrap them in "
-            "<Fragment>…</Fragment> or <></>",
+            f"{len(frame.roots)} roots in the same branch: {nodes} — wrap them in <Fragment>…</Fragment> or <></>",
         )
     ]
 
@@ -238,11 +232,7 @@ def structure_violations(body: str) -> list[tuple[int, str]]:
                         depth += 1
             i = j + 1
         else:
-            nxt = [
-                p
-                for p in (text.find("<", i), text.find("{%", i), text.find("{{", i))
-                if p >= 0
-            ]
+            nxt = [p for p in (text.find("<", i), text.find("{%", i), text.find("{{", i)) if p >= 0]
             j = min(nxt) if nxt else n
             if depth == 0 and text[i:j].strip():
                 frame.add(line_at(text, i), "text")

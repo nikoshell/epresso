@@ -6,6 +6,7 @@ Uses markdown-it-py; produces ``RenderedContent`` with ``html`` and metadata
 
 from __future__ import annotations
 
+import functools
 import re
 from collections.abc import Callable
 from typing import Any
@@ -16,7 +17,7 @@ from .content import store as _store
 from .errors import ContentError
 from .jsxattrs import parse_jsx_attrs
 
-# Plugin-registered markdown extensions. Pandoc / MkDocs features are opt-in via
+# Plugin-registered markdown extensions. Extra syntaxes are opt-in via
 # plugins (epresso.plugins); core stays agnostic until a plugin registers a
 # source transform / html post-processor.
 _MD_SOURCE_TRANSFORMS: list = []
@@ -25,12 +26,14 @@ _MD_HTML_POST: list = []
 
 def register_markdown_transform(fn) -> None:
     """Register a source transform ``str -> str`` applied before markdown rendering."""
-    _MD_SOURCE_TRANSFORMS.append(fn)
+    if fn not in _MD_SOURCE_TRANSFORMS:  # idempotent: dev reloads re-run plugin hooks
+        _MD_SOURCE_TRANSFORMS.append(fn)
 
 
 def register_html_transform(fn) -> None:
     """Register an html post-processor ``str -> str`` applied to rendered output."""
-    _MD_HTML_POST.append(fn)
+    if fn not in _MD_HTML_POST:  # idempotent: dev reloads re-run plugin hooks
+        _MD_HTML_POST.append(fn)
 
 
 def _apply_source_transforms(src: str) -> str:
@@ -40,12 +43,20 @@ def _apply_source_transforms(src: str) -> str:
 
 
 _MD_RENDER_TRANSFORMS: list = []
+_MD_IT_PLUGINS: list = []
+
+
+def register_markdown_it_plugin(fn) -> None:
+    """Register a markdown-it plugin ``fn(md)`` applied to every renderer (idempotent)."""
+    if fn not in _MD_IT_PLUGINS:
+        _MD_IT_PLUGINS.append(fn)
 
 
 def register_markdown_render_transform(fn) -> None:
     """Register a render transform ``fn(md, src, depth) -> str`` (markdown-in,
     markdown-with-raw-html out) run before the final render (e.g. content tabs)."""
-    _MD_RENDER_TRANSFORMS.append(fn)
+    if fn not in _MD_RENDER_TRANSFORMS:  # idempotent: dev reloads re-run plugin hooks
+        _MD_RENDER_TRANSFORMS.append(fn)
 
 
 def _apply_render_transforms(md, src: str, depth: int) -> str:
@@ -66,7 +77,7 @@ def render_fragment(md, src: str, depth: int = 0) -> str:
 def _renderer(config_markdown: Any, component_names: tuple[str, ...] = (), component_renderer=None) -> MarkdownIt:
     md = MarkdownIt("commonmark", {"html": True, "linkify": True, "typographer": True})
     md.enable("table")
-    # Basic GitHub-ish extensions enabled via commonmark + extras.
+    # Tables and strikethrough on top of CommonMark.
     try:
         md.enable("strikethrough")
     except Exception:  # noqa: BLE001
@@ -76,15 +87,15 @@ def _renderer(config_markdown: Any, component_names: tuple[str, ...] = (), compo
         cc = getattr(config_markdown, "code_component", None) or None
         comps = getattr(config_markdown, "code_components", None) or {}
         if cc or comps:
-            md.options["highlight"] = (
-                lambda code, lang, attrs: _pygments_highlight(code, lang, attrs, cc, comps)
-            )
+            md.options["highlight"] = lambda code, lang, attrs: _pygments_highlight(code, lang, attrs, cc, comps)
             # When a code component is set, unwrap markdown-it's auto <pre><code>
             # wrapper so the component owns the code-block markup (markdown-it
             # only returns highlight output bare when it starts with ``<pre``).
             md.renderer.rules["fence"] = _make_component_fence_renderer()  # type: ignore[attr-defined]
         else:
             md.options["highlight"] = _pygments_highlight
+    for fn in _MD_IT_PLUGINS:
+        md.use(fn)
     if component_names and component_renderer:
         md.inline.ruler.before("html_inline", "epresso_components", _make_component_rule(component_names))
         # markdown-it RendererProtocol lacks a typed `rules` dict
@@ -97,7 +108,7 @@ def _fence_file(attrs: str) -> str:
     """Extract an optional filename from a fenced-code info string.
 
     Accepts ``title="..."``/``file="..."``/``name="..."`` (quoted or bare), but
-    ignores Pandoc class tokens (leading ``.``) so ``{.py .no-copy}`` never reads
+    ignores class tokens (leading ``.``) so ``{.py .no-copy}`` never reads
     ``.no-copy`` as a filename.
     """
     attrs = (attrs or "").strip()
@@ -135,10 +146,7 @@ def _split_code_lines(html: str) -> str:
             for i, part in enumerate(parts):
                 lines[-1] += part
                 if i < len(parts) - 1:
-                    closes = "".join(
-                        "</" + t[1:].split(" ")[0].split(">")[0] + ">"
-                        for t in reversed(stack)
-                    )
+                    closes = "".join("</" + t[1:].split(" ")[0].split(">")[0] + ">" for t in reversed(stack))
                     lines[-1] += closes
                     lines.append("".join(stack))
     return "".join(f'<span class="code-line">{line}</span>' for line in lines)
@@ -159,7 +167,7 @@ def _pygments_highlight(
     from pygments.lexers import get_lexer_by_name
     from pygments.util import ClassNotFound
 
-    # Pandoc classes may arrive as leading-dot tokens (in lang or the attrs tail):
+    # Classes may arrive as leading-dot tokens (in lang or the attrs tail):
     # _pandoc_fence_info lifts the first .class to `lang`, but a class-only block
     # (no language, e.g. `{.no-copy}`) reaches here with lang=".no-copy".
     classes: list[str] = []
@@ -214,6 +222,7 @@ def _pygments_highlight(
     return f'<pre class="highlight{escape(extra)}"{data}><code class="language-{escape(lang)}">{body}</code></pre>'
 
 
+@functools.lru_cache(maxsize=64)  # pure; asked for on every page
 def pygments_css(theme: str = "default", selector: str = ".highlight") -> str:
     """Return the Pygments CSS for one theme (link it in your layout).
 
@@ -273,6 +282,7 @@ def _pair(prop: str, light: str, dark: str) -> str:
     return light
 
 
+@functools.lru_cache(maxsize=64)  # pure; asked for on every page
 def pygments_css_pair(light: str = "default", dark: str = "default", selector: str = ".highlight") -> str:
     """Pygments CSS where every colour is ``light-dark(light, dark)``.
 
@@ -296,7 +306,6 @@ def pygments_css_pair(light: str = "default", dark: str = "default", selector: s
     return "\n".join(rules)
 
 
-
 def _headings_and_images_from_tokens(tokens: list) -> tuple[list[dict[str, Any]], list[str]]:
     """Collect heading + image metadata from an already-parsed token stream.
 
@@ -311,7 +320,7 @@ def _headings_and_images_from_tokens(tokens: list) -> tuple[list[dict[str, Any]]
             title = ""
             if i + 1 < len(tokens) and tokens[i + 1].type == "inline":
                 title = tokens[i + 1].content
-            slug = slugify(title)
+            slug = str(tok.attrs.get("id") or "") or slugify(title)  # `{ #id }` wins
             headings.append({"depth": level, "slug": slug, "text": title})
         if tok.type == "inline":
             for child in tok.children or []:
@@ -332,8 +341,8 @@ def slugify(text: str) -> str:
 
 def heading_text(text: str) -> str:
     """Clean a heading's raw markdown for display: strip inline HTML/images/links."""
-    text = re.sub(r"<[^>]+>", "", text)                    # inline HTML / <img>
-    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)   # markdown image
+    text = re.sub(r"<[^>]+>", "", text)  # inline HTML / <img>
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)  # markdown image
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)  # markdown link -> label
     return re.sub(r"\s+", " ", text).strip()
 
@@ -348,7 +357,7 @@ def strip_first_h1(body: str) -> str:
     """Remove the leading ``# H1`` line from ``body``."""
     m = re.search(r"^#\s+.+\s*$", body, re.MULTILINE)
     if m:
-        return body[: m.start()] + body[m.end():]
+        return body[: m.start()] + body[m.end() :]
     return body
 
 
@@ -360,7 +369,8 @@ def headings(md: MarkdownIt, body: str) -> list[dict]:
         if tok.type == "heading_open" and tok.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
             raw = tokens[i + 1].content if (i + 1 < len(tokens) and tokens[i + 1].type == "inline") else ""
             text = heading_text(raw)
-            out.append({"depth": int(tok.tag[1]), "slug": slugify(text), "text": text})
+            slug = str(tok.attrs.get("id") or "") or slugify(text)
+            out.append({"depth": int(tok.tag[1]), "slug": slug, "text": text})
     return out
 
 
@@ -371,9 +381,7 @@ def headings(md: MarkdownIt, body: str) -> list[dict]:
 # the renderer emits a placeholder that the site expands to the epresso component
 # output at template time (when the Jinja env is available).
 
-_COMPONENT_TAG_RE = __import__("re").compile(
-    r"<(?P<name>[A-Za-z][A-Za-z0-9]*)(?P<attrs>[^>]*?)(?P<selfclose>/?)\s*>"
-)
+_COMPONENT_TAG_RE = __import__("re").compile(r"<(?P<name>[A-Za-z][A-Za-z0-9]*)(?P<attrs>[^>]*?)(?P<selfclose>/?)\s*>")
 
 
 def _parse_attrs(s: str) -> dict[str, Any]:
@@ -473,15 +481,10 @@ def component_placeholder(name: str, attrs: dict[str, Any], children: str) -> st
     """Emit a deterministic placeholder the site expands at template time."""
     import json
 
-    return (
-        f'<!--epresso-md:{json.dumps({"name": name, "props": attrs})}-->'
-        f"{children}<!--/epresso-md-->"
-    )
+    return f"<!--epresso-md:{json.dumps({'name': name, 'props': attrs})}-->{children}<!--/epresso-md-->"
 
 
-_MD_COMPONENT_RE = __import__("re").compile(
-    r"<!--epresso-md:(\{.*?\})-->(.*?)<!--/epresso-md-->", __import__("re").S
-)
+_MD_COMPONENT_RE = __import__("re").compile(r"<!--epresso-md:(\{.*?\})-->(.*?)<!--/epresso-md-->", __import__("re").S)
 
 
 def expand_placeholders(html: str, component_renderer) -> str:
@@ -496,23 +499,82 @@ def expand_placeholders(html: str, component_renderer) -> str:
     return _MD_COMPONENT_RE.sub(_repl, html)
 
 
-def _rewrite_relative_images(html: str, base: str) -> str:
-    """Prefix relative ``src="…"`` in rendered markdown with ``base``.
+def _markdown_urls(tokens: list) -> set[str]:
+    """URLs written with Markdown syntax (``![](x)`` / ``[](x)``), as opposed to
+    raw HTML: they resolve against the source file, raw HTML against the page."""
+    out: set[str] = set()
+    stack = list(tokens)
+    while stack:
+        t = stack.pop()
+        if t.children:
+            stack.extend(t.children)
+        if t.type == "image" and t.attrs.get("src"):
+            out.add(str(t.attrs["src"]))
+        elif t.type == "link_open" and t.attrs.get("href"):
+            out.add(str(t.attrs["href"]))
+    return out
 
-    Rewrites ``src="./x.jpg"`` / ``src="x.jpg"`` (no scheme, not already
-    absolute) to ``src="{base}x.jpg"``. Skips external, protocol-relative,
-    root-relative and data URIs.
+
+_SKIP_URL = ("http://", "https://", "//", "data:", "#", "/", "mailto:", "tel:", "javascript:")
+
+
+def _join(base: str, rel: str) -> str:
+    """``base`` + a relative URL, ``./`` and ``../`` resolved, ``?``/``#`` kept."""
+    import posixpath
+
+    cut = min((k for k in (rel.find("?"), rel.find("#")) if k >= 0), default=len(rel))
+    path, rest = rel[:cut], rel[cut:]
+    joined = posixpath.normpath(base + path)
+    if path.endswith("/") and not joined.endswith("/"):
+        joined += "/"
+    return joined + rest
+
+
+def _base_for(url: str, base: str, md_urls: set[str] | None, page_base: str | None) -> str:
+    if md_urls is None or url in md_urls or not page_base:
+        return base
+    return page_base.rstrip("/") + "/"
+
+
+def _rewrite_relative_images(
+    html: str, base: str, md_urls: set[str] | None = None, page_base: str | None = None
+) -> str:
+    """Resolve relative ``src="…"`` in rendered markdown to absolute URLs.
+
+    Markdown images resolve against ``base`` (the source file's dir); raw-HTML
+    ones against ``page_base`` (the page's URL dir — what a browser
+    use), when given. Skips external, protocol-relative, root-relative and data
+    URIs.
     """
-    import re
 
     def _repl(m: re.Match[str]) -> str:
         src = m.group(1)
-        if src.startswith(("http://", "https://", "//", "data:", "#", "/")):
+        if src.startswith(_SKIP_URL):
             return m.group(0)
-        rel = src[2:] if src.startswith("./") else src
-        return f'src="{base}{rel}"'
+        return f'src="{_join(_base_for(src, base, md_urls, page_base), src)}"'
 
     return re.sub(r'src="([^"]+)"', _repl, html)
+
+
+_PAGE_EXT = {"", ".md", ".markdown", ".html", ".htm"}
+
+
+def _rewrite_relative_files(html: str, base: str, md_urls: set[str], page_base: str | None) -> str:
+    """Resolve relative ``href``s to *files* (``report.pdf``, ``img/x.zip``) like
+    images. Page links were resolved before this; anything without a file
+    extension, or still ``.md``/``.html``, is left alone."""
+    import posixpath
+
+    def _repl(m: re.Match[str]) -> str:
+        href = m.group(1)
+        if href.startswith(_SKIP_URL):
+            return m.group(0)
+        path = href.partition("#")[0].partition("?")[0]
+        if posixpath.splitext(path)[1].lower() in _PAGE_EXT:
+            return m.group(0)
+        return f'href="{_join(_base_for(href, base, md_urls, page_base), href)}"'
+
+    return re.sub(r'href="([^"]+)"', _repl, html)
 
 
 # ── backend dispatch ───────────────────────────────────────────────────────
@@ -542,14 +604,22 @@ def render_markdown(
     component_names: tuple[str, ...] = (),
     component_renderer=None,
     link_resolver=None,
+    page_base: str | None = None,
+    **kwargs: Any,
 ) -> _store.RenderedContent:
     """Render a Markdown body through the configured backend.
+
+    ``page_base`` is where raw-HTML relative URLs resolve (the page's own URL
+    dir, as a browser sees them); Markdown ``![]()``/``[]()`` URLs
+    resolve against ``image_base`` (the source file's dir).
 
     ``config_markdown.backend`` selects the renderer — ``"native"`` (the built-in
     markdown-it-py pipeline) or ``"rust"`` (the optional accelerator, which must
     be installed). Everything else is forwarded to the backend unchanged.
     """
     name = getattr(config_markdown, "backend", "native") or "native"
+    if page_base is not None:
+        kwargs = {**kwargs, "page_base": page_base}
     return _backend(name)(
         body,
         config_markdown,
@@ -557,6 +627,7 @@ def render_markdown(
         component_names=component_names,
         component_renderer=component_renderer,
         link_resolver=link_resolver,
+        **kwargs,
     )
 
 
@@ -567,6 +638,7 @@ def _render_native(
     component_names: tuple[str, ...] = (),
     component_renderer=None,
     link_resolver=None,
+    page_base: str | None = None,
 ) -> _store.RenderedContent:
     """Render a Markdown body to HTML, extracting heading + image metadata.
 
@@ -578,7 +650,7 @@ def _render_native(
     ``component_names`` / ``component_renderer`` enable the custom-component
     pass: allow-listed tags are captured and handed to ``component_renderer``.
 
-    ``link_resolver`` (optional) resolves GitHub/wiki-style links
+    ``link_resolver`` (optional) resolves wiki-style links
     (``[[Page]]``, ``[wiki_page:Page]``, and relative ``.md`` links) to URLs.
     """
     if not body:
@@ -602,15 +674,16 @@ def _render_native(
     html = md.renderer.render(tokens, md.options, env)
     for _fn in _MD_HTML_POST:
         html = _fn(html)
+    md_urls = _markdown_urls(tokens)
     if image_base:
-        html = _rewrite_relative_images(html, image_base.rstrip("/") + "/")
+        html = _rewrite_relative_images(html, image_base.rstrip("/") + "/", md_urls, page_base)
     if link_resolver is not None:
         html = _rewrite_markdown_links(html, link_resolver)
+    if image_base:  # links to files (downloads), after page links resolved
+        html = _rewrite_relative_files(html, image_base.rstrip("/") + "/", md_urls, page_base)
     headings, images = _headings_and_images_from_tokens(tokens)
     if headings and getattr(config_markdown, "add_slug_ids", True):
-        html = _inject_heading_ids(
-            html, headings, autolink=getattr(config_markdown, "autolink_headings", True)
-        )
+        html = _inject_heading_ids(html, headings, autolink=getattr(config_markdown, "autolink_headings", True))
     return _store.RenderedContent(
         html=html,
         metadata={"headings": headings, "image_paths": images},
@@ -671,7 +744,7 @@ def _inject_heading_ids(html: str, headings: list[dict], autolink: bool = False)
     document order; slugs are generated with :func:`slugify`. This powers
     in-page tables of contents (``[\u2191](\u2191)`` anchors). Headings that
     already carry an ``id`` are left untouched. ``autolink`` wraps each heading in
-    a GitHub-style ``#`` link (shown on hover via CSS).
+    a ``#`` permalink (shown on hover via CSS).
     """
     import re as _re
 
@@ -686,8 +759,9 @@ def _inject_heading_ids(html: str, headings: list[dict], autolink: bool = False)
         tag, attrs, content = m.group(1), m.group(2), m.group(3)
         slug = headings[idx].get("slug", "")
         idx += 1
-        if not slug or "id=" in attrs:
+        if not slug:
             return m.group(0)
+        attrs = _re.sub(r'\s+id="[^"]*"', "", attrs)  # an explicit id is the slug already
         anchor = (
             f'<a class="heading-anchor" href="#{slug}" '
             f'aria-label="Link to this section"><span aria-hidden="true">#</span></a>'

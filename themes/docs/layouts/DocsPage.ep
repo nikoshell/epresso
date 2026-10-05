@@ -9,7 +9,7 @@ class Props(BaseModel):
     path: str = "/"
 
 
-docs = list(site.get_collection("docs"))
+docs = list(site.get_collection_index("docs"))  # nav only: body edits elsewhere skip this page
 ---
 
 <DocsBase title={props.title} path={props.path}>
